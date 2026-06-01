@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { initializeApp } from "firebase/app";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs } from "firebase/firestore";
+import { getAuth, RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
 
 // Firebase config
 const firebaseConfig = {
@@ -14,6 +15,7 @@ const firebaseConfig = {
 
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getFirestore(firebaseApp);
+const auth = getAuth(firebaseApp);
 
 const MAX_DIA = 5;
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -108,7 +110,7 @@ function CalDay({ day, keyStr, count, status, onToggle, calYear, calMonth }) {
 
 export default function App() {
   const [screen, setScreen] = useState("inicio");
-  const [form, setForm] = useState({ nombre:"", celular:"", notas:"", numPerros:1 });
+  const [form, setForm] = useState({ nombre:"", celular:"", notas:"", numPerros:1, perros:[{nombre:"", raza:""}] });
   const [errors, setErrors] = useState({});
   const [plan, setPlan] = useState(null);
   const [diasSel, setDiasSel] = useState([]);
@@ -120,6 +122,11 @@ export default function App() {
   const [loginErr, setLoginErr] = useState(false);
   const [usuarioActual, setUsuarioActual] = useState(null);
   const [cargando, setCargando] = useState(false);
+  const [codigoSMS, setCodigoSMS] = useState("");
+  const [confirmResult, setConfirmResult] = useState(null);
+  const [smsEnviado, setSmsEnviado] = useState(false);
+  const [smsError, setSmsError] = useState("");
+  const recaptchaRef = useRef(null);
 
   // Cargar bookings de Firebase al inicio
   useEffect(() => {
@@ -134,13 +141,57 @@ export default function App() {
 
   const getCount = (key) => bookings[key] || 0;
 
-  const irAPlan = () => {
+  const irAPlan = async () => {
     const errs = {};
     if (!form.nombre.trim()) errs.nombre = "Por favor escribe tu nombre";
     if (form.celular.length !== 10) errs.celular = "Ingresa un número válido de 10 dígitos";
     if (Object.keys(errs).length) { setErrors(errs); return; }
+    setCargando(true);
+    // Check if number already exists
+    const snap = await getDoc(doc(db, "usuarios", form.celular));
+    if (snap.exists()) {
+      setErrors({ celular: "Este número ya está registrado. Usa ¿Ya estás registrado?" });
+      setCargando(false); return;
+    }
     setErrors({}); setPlan(null); setDiasSel([]); setSemanaAviso(null);
+    setCargando(false);
     setScreen("plan");
+  };
+
+  // SMS for "Ya estás registrado"
+  const enviarSMSLogin = async () => {
+    if (loginCel.length !== 10) { setLoginErr(true); setSmsError("Ingresa un número válido de 10 dígitos"); return; }
+    setSmsError(""); setLoginErr(false); setCargando(true);
+    // Check if number exists first
+    const snap = await getDoc(doc(db, "usuarios", loginCel));
+    if (!snap.exists()) { setLoginErr(true); setCargando(false); return; }
+    try {
+      if (!window.recaptchaVerifier) {
+        window.recaptchaVerifier = new RecaptchaVerifier(auth, recaptchaRef.current, { size: "invisible" });
+      }
+      const result = await signInWithPhoneNumber(auth, "+52" + loginCel, window.recaptchaVerifier);
+      setConfirmResult(result);
+      setSmsEnviado(true);
+    } catch (e) {
+      setSmsError("Error al enviar el SMS. Intenta de nuevo.");
+      if (window.recaptchaVerifier) { window.recaptchaVerifier.clear(); window.recaptchaVerifier = null; }
+    }
+    setCargando(false);
+  };
+
+  const verificarCodigoLogin = async () => {
+    if (!codigoSMS || codigoSMS.length < 6) { setSmsError("Ingresa el código de 6 dígitos"); return; }
+    setSmsError(""); setCargando(true);
+    try {
+      await confirmResult.confirm(codigoSMS);
+      const snap = await getDoc(doc(db, "usuarios", loginCel));
+      setUsuarioActual({ celular: loginCel, ...snap.data() });
+      setSmsEnviado(false); setCodigoSMS(""); setConfirmResult(null);
+      setScreen("misDias");
+    } catch (e) {
+      setSmsError("Código incorrecto. Intenta de nuevo.");
+    }
+    setCargando(false);
   };
 
   const irACalendario = () => {
@@ -231,7 +282,7 @@ export default function App() {
   };
 
   const reiniciar = () => {
-    setForm({ nombre:"", celular:"", notas:"", numPerros:1 });
+    setForm({ nombre:"", celular:"", notas:"", numPerros:1, perros:[{nombre:"", raza:""}] });
     setPlan(null); setDiasSel([]); setSemanaAviso(null);
     setScreen("inicio");
   };
@@ -335,7 +386,7 @@ export default function App() {
         <div style={S.perrosBtns}>
           {[1,2,3,4].map(n => (
             <button key={n} style={S.perroBtn(form.numPerros === n)}
-              onClick={() => setForm(f => ({ ...f, numPerros: n }))}>
+              onClick={() => setForm(f => ({ ...f, numPerros: n, perros: Array.from({length:n}, (_,i) => f.perros[i] || {nombre:"", raza:""}) }))}>
               <div style={{ fontSize:15 }}>{n}</div>
               <div style={{ fontSize:11, marginTop:2 }}>{n===1?"perro":"perros"}</div>
             </button>
@@ -343,12 +394,29 @@ export default function App() {
         </div>
         <p style={{ fontSize:12, color:"#64748b", marginTop:6 }}>Se reservarán {form.numPerros} lugar{form.numPerros>1?"es":""} por día</p>
       </div>
+      {Array.from({length: form.numPerros}).map((_, i) => (
+        <div key={i} style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:12, padding:"14px", marginBottom:12 }}>
+          <p style={{ fontSize:13, fontWeight:700, color:"#f59e0b", margin:"0 0 10px" }}>Perro {i+1}</p>
+          <div style={S.field}>
+            <label style={S.label}>Nombre</label>
+            <input style={{ ...S.input, marginBottom:0 }} placeholder="Ej. Max" value={form.perros[i]?.nombre || ""}
+              onChange={e => setForm(f => { const p=[...f.perros]; p[i]={...p[i], nombre:e.target.value}; return {...f, perros:p}; })} />
+          </div>
+          <div style={{ marginTop:10 }}>
+            <label style={S.label}>Raza (opcional)</label>
+            <input style={{ ...S.input, marginBottom:0 }} placeholder="Ej. Labrador" value={form.perros[i]?.raza || ""}
+              onChange={e => setForm(f => { const p=[...f.perros]; p[i]={...p[i], raza:e.target.value}; return {...f, perros:p}; })} />
+          </div>
+        </div>
+      ))}
       <div style={S.field}>
         <label style={S.label}>Notas (opcional)</label>
         <textarea style={S.textarea} placeholder="Ej. Perro ansioso, lleva snack" value={form.notas}
           onChange={e => setForm(f => ({ ...f, notas: e.target.value }))} />
       </div>
-      <button style={S.btnPrimary} onClick={irAPlan}>Continuar</button>
+      <button style={{ ...S.btnPrimary, opacity: cargando ? 0.6 : 1 }} onClick={irAPlan} disabled={cargando}>
+        {cargando ? "Verificando..." : "Continuar"}
+      </button>
       <button style={S.btnGhost} onClick={() => setScreen("inicio")}>← Volver</button>
     </div></div>
   );
@@ -438,20 +506,45 @@ export default function App() {
   if (screen === "registrado") return (
     <div style={S.root}><div style={S.wrap}>
       <p style={S.title}>Ya estás registrado</p>
-      <p style={S.sub}>Ingresa tu número para ver tus reservaciones y agregar más días</p>
-      <div style={S.field}>
-        <label style={S.label}>Número celular</label>
-        <div style={S.phoneRow}>
-          <span style={S.phonePrefix}>🇲🇽 +52</span>
-          <input style={S.phoneInput} placeholder="10 dígitos" maxLength={10} value={loginCel}
-            onChange={e => { setLoginCel(e.target.value.replace(/\D/g,"")); setLoginErr(false); }} />
-        </div>
-        {loginErr && <p style={S.err}>Número no encontrado en el sistema</p>}
-      </div>
-      <button style={{ ...S.btnPrimary, opacity: cargando ? 0.6 : 1 }} onClick={login} disabled={cargando}>
-        {cargando ? "Buscando..." : "Ver mis reservaciones"}
-      </button>
-      <button style={S.btnGhost} onClick={() => setScreen("inicio")}>← Volver</button>
+      <p style={S.sub}>Ingresa tu número para verificar tu identidad</p>
+      <div ref={recaptchaRef}></div>
+      {!smsEnviado ? (
+        <>
+          <div style={S.field}>
+            <label style={S.label}>Número celular</label>
+            <div style={S.phoneRow}>
+              <span style={S.phonePrefix}>🇲🇽 +52</span>
+              <input style={S.phoneInput} placeholder="10 dígitos" maxLength={10} value={loginCel}
+                onChange={e => { setLoginCel(e.target.value.replace(/\D/g,"")); setLoginErr(false); setSmsError(""); }} />
+            </div>
+            {loginErr && <p style={S.err}>Número no encontrado en el sistema</p>}
+            {smsError && <p style={S.err}>{smsError}</p>}
+          </div>
+          <button style={{ ...S.btnPrimary, opacity: cargando ? 0.6 : 1 }} onClick={enviarSMSLogin} disabled={cargando}>
+            {cargando ? "Enviando código..." : "Enviar código de verificación"}
+          </button>
+        </>
+      ) : (
+        <>
+          <div style={{ ...S.infoBox, marginBottom:12, color:"#4ade80", borderColor:"#14532d" }}>
+            ✅ Código enviado a +52 {loginCel}
+          </div>
+          <div style={S.field}>
+            <label style={S.label}>Código de verificación</label>
+            <input style={{ ...S.input, letterSpacing:8, fontSize:20, textAlign:"center" }}
+              placeholder="------" maxLength={6} value={codigoSMS}
+              onChange={e => setCodigoSMS(e.target.value.replace(/\D/g,""))} />
+          </div>
+          {smsError && <p style={S.err}>{smsError}</p>}
+          <button style={{ ...S.btnPrimary, opacity: cargando ? 0.6 : 1 }} onClick={verificarCodigoLogin} disabled={cargando}>
+            {cargando ? "Verificando..." : "Verificar"}
+          </button>
+          <button style={S.btnGhost} onClick={() => { setSmsEnviado(false); setCodigoSMS(""); setSmsError(""); if(window.recaptchaVerifier){window.recaptchaVerifier.clear();window.recaptchaVerifier=null;} }}>
+            Cambiar número
+          </button>
+        </>
+      )}
+      <button style={S.btnGhost} onClick={() => { setScreen("inicio"); setSmsEnviado(false); setCodigoSMS(""); setSmsError(""); }}>← Volver</button>
     </div></div>
   );
 
@@ -472,10 +565,22 @@ export default function App() {
               })}
         </div>
         <button style={S.btnPrimary} onClick={() => {
-          setForm({ nombre: u.nombre, celular: u.celular, notas: u.notas || "", numPerros: u.numPerros || 1 });
+          setForm({ nombre: u.nombre, celular: u.celular, notas: u.notas || "", numPerros: u.numPerros || 1, perros: u.perros || [{nombre:"",raza:""}] });
           setPlan(null); setDiasSel([]); setSemanaAviso(null);
           setScreen("plan");
         }}>+ Agregar más días</button>
+        <button style={{ ...S.btnGhost, borderColor:"#f59e0b", color:"#f59e0b" }} onClick={() => {
+          // Add one more dog
+          const newNum = (u.numPerros || 1) + 1;
+          const newPerros = [...(u.perros || [{nombre:"",raza:""}]), {nombre:"",raza:""}];
+          setForm({ nombre: u.nombre, celular: u.celular, notas: u.notas || "", numPerros: newNum, perros: newPerros });
+          // Update in Firebase
+          const usuarioRef = doc(db, "usuarios", u.celular);
+          updateDoc(usuarioRef, { numPerros: newNum, perros: newPerros });
+          setUsuarioActual({ ...u, numPerros: newNum, perros: newPerros });
+          setPlan(null); setDiasSel([]); setSemanaAviso(null);
+          setScreen("plan");
+        }}>🐾 Agregar otro perro</button>
         <button style={S.btnGhost} onClick={() => setScreen("inicio")}>← Volver</button>
       </div></div>
     );
