@@ -257,16 +257,6 @@ export default function App() {
     setScreen("inicio");
   };
 
-  const login = async () => {
-    setCargando(true);
-    const snap = await getDoc(doc(db, "usuarios", loginCel));
-    if (!snap.exists()) { setLoginErr(true); setCargando(false); return; }
-    setLoginErr(false);
-    setUsuarioActual({ celular: loginCel, ...snap.data() });
-    setCargando(false);
-    setScreen("misDias");
-  };
-
   const renderCalendario = () => {
     const { offset, total } = getMonthDays(calAnio, calMes);
     const cells = [...Array(offset).fill(null), ...Array.from({ length: total }, (_, i) => i + 1)];
