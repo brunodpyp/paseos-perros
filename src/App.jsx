@@ -562,6 +562,8 @@ export default function App() {
           </div>
         ))}
         <button style={S.btnPrimary} onClick={async () => {
+          const sinNombre = nuevosPerros.some(p => !p.nombre.trim());
+          if (sinNombre) { alert("El nombre de cada perro es obligatorio"); return; }
           const newNum = (u.numPerros || 1) + nuevosPerros.length;
           const newPerros = [...(u.perros || []), ...nuevosPerros];
           const usuarioRef = doc(db, "usuarios", u.celular);
@@ -571,9 +573,6 @@ export default function App() {
           setForm({ nombre: u.nombre, celular: u.celular, notas: u.notas || "", numPerros: newNum, perros: newPerros });
           setPlan(null); setDiasSel([]); setSemanaAviso(null);
           setScreen("plan");
-        , () => {
-          const sinNombre = nuevosPerros.some(p => !p.nombre.trim());
-          if (sinNombre) { alert("El nombre de cada perro es obligatorio"); return; }
         }}>Continuar</button>
         <button style={S.btnGhost} onClick={() => setScreen("misDias")}>← Volver</button>
       </div></div>
