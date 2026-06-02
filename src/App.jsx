@@ -122,7 +122,8 @@ export default function App() {
   const [loginErr, setLoginErr] = useState(false);
   const [usuarioActual, setUsuarioActual] = useState(null);
   const [cargando, setCargando] = useState(false);
-  const [nuevosPerros, setNuevosPerros] = useState([{nombre:"", raza:""}]);
+  const [nuevosPerros, setNuevosPerros] = useState([{nombre:"", raza:"", notas:""}]);
+  const [diasBloqueados, setDiasBloqueados] = useState([]); // dias ya reservados por este usuario
 
 
   // Cargar bookings de Firebase al inicio
@@ -150,6 +151,9 @@ export default function App() {
       setErrors({ celular: "Este número ya está registrado. Usa ¿Ya estás registrado?" });
       setCargando(false); return;
     }
+    // Validate perros names
+    const sinNombre = form.perros.some(p => !p.nombre.trim());
+    if (sinNombre) { setErrors({ perros: "El nombre de cada perro es obligatorio" }); setCargando(false); return; }
     setErrors({}); setPlan(null); setDiasSel([]); setSemanaAviso(null);
     setCargando(false);
     setScreen("plan");
@@ -179,7 +183,7 @@ export default function App() {
     const todayMidnight = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
     const bloqueados = cinco.filter(k => {
       const d = keyToDate(k);
-      return (MAX_DIA - getCount(k)) < form.numPerros || d <= todayMidnight;
+      return (MAX_DIA - getCount(k)) < form.numPerros || d <= todayMidnight || diasBloqueados.includes(k);
     });
     if (bloqueados.length > 0) {
       setSemanaAviso(`Uno o más días de esa semana no tienen espacio para ${form.numPerros} perro${form.numPerros>1?"s":""}. Intenta otra semana.`);
@@ -253,7 +257,7 @@ export default function App() {
   };
 
   const reiniciar = () => {
-    setForm({ nombre:"", celular:"", notas:"", numPerros:1, perros:[{nombre:"", raza:""}] });
+    setForm({ nombre:"", celular:"", notas:"", numPerros:1, perros:[{nombre:"", raza:""}] }); setDiasBloqueados([]);
     setPlan(null); setDiasSel([]); setSemanaAviso(null);
     setScreen("inicio");
   };
@@ -282,8 +286,9 @@ export default function App() {
             const full = remaining < form.numPerros;
             const almost = remaining <= 2 && !full;
             const selected = diasSel.includes(key);
+            const isBloqueado = diasBloqueados.includes(key);
             let status = "available";
-            if (isWeekend || isToday || isPast) status = "weekend";
+            if (isWeekend || isToday || isPast || isBloqueado) status = "weekend";
             else if (selected) status = "selected";
             else if (full) status = "full";
             else if (almost) status = "almost";
@@ -360,7 +365,7 @@ export default function App() {
           <p style={{ fontSize:13, fontWeight:700, color:"#f59e0b", margin:"0 0 10px" }}>Perro {i+1}</p>
           <div style={S.field}>
             <label style={S.label}>Nombre</label>
-            <input style={{ ...S.input, marginBottom:0 }} placeholder="Ej. Max" value={form.perros[i]?.nombre || ""}
+            <input style={{ ...S.input, marginBottom:0 }} placeholder="Ej. Max" required value={form.perros[i]?.nombre || ""}
               onChange={e => setForm(f => { const p=[...f.perros]; p[i]={...p[i], nombre:e.target.value}; return {...f, perros:p}; })} />
           </div>
           <div style={{ marginTop:10 }}>
@@ -370,6 +375,7 @@ export default function App() {
           </div>
         </div>
       ))}
+      {errors.perros && <p style={{ ...S.err, marginBottom:8 }}>{errors.perros}</p>}
       <div style={S.field}>
         <label style={S.label}>Notas (opcional)</label>
         <textarea style={S.textarea} placeholder="Ej. Perro ansioso, lleva snack" value={form.notas}
@@ -502,11 +508,13 @@ export default function App() {
         </div>
         <button style={S.btnPrimary} onClick={() => {
           setForm({ nombre: u.nombre, celular: u.celular, notas: u.notas || "", numPerros: u.numPerros || 1, perros: u.perros || [{nombre:"",raza:""}] });
+          setDiasBloqueados(u.dias || []); // bloquear dias ya reservados
           setPlan(null); setDiasSel([]); setSemanaAviso(null);
           setScreen("plan");
         }}>+ Agregar más días</button>
         <button style={{ ...S.btnGhost, borderColor:"#f59e0b", color:"#f59e0b" }} onClick={() => {
-          setNuevosPerros([{nombre:"", raza:""}]);
+          setNuevosPerros([{nombre:"", raza:"", notas:""}]);
+          setDiasBloqueados([]); // al agregar perro nuevo no bloquear dias
           setScreen("agregarPerro");
         }}>🐾 Agregar otro perro</button>
         <button style={S.btnGhost} onClick={() => setScreen("inicio")}>← Volver</button>
@@ -516,7 +524,7 @@ export default function App() {
 
   if (screen === "agregarPerro") {
     const u = usuarioActual || {};
-    const maxPuedoAgregar = 4 - (u.numPerros || 1);
+    const maxPuedoAgregar = Math.max(1, 4 - (u.numPerros || 1));
     return (
       <div style={S.root}><div style={S.wrap}>
         <p style={S.title}>Agregar perros</p>
@@ -538,13 +546,18 @@ export default function App() {
             <p style={{ fontSize:13, fontWeight:700, color:"#f59e0b", margin:"0 0 10px" }}>Perro nuevo {i+1}</p>
             <div style={S.field}>
               <label style={S.label}>Nombre</label>
-              <input style={{ ...S.input, marginBottom:0 }} placeholder="Ej. Luna" value={nuevosPerros[i]?.nombre || ""}
+              <input style={{ ...S.input, marginBottom:0 }} placeholder="Ej. Luna" required value={nuevosPerros[i]?.nombre || ""}
                 onChange={e => setNuevosPerros(p => { const np=[...p]; np[i]={...np[i], nombre:e.target.value}; return np; })} />
             </div>
             <div style={{ marginTop:10 }}>
               <label style={S.label}>Raza (opcional)</label>
               <input style={{ ...S.input, marginBottom:0 }} placeholder="Ej. Poodle" value={nuevosPerros[i]?.raza || ""}
                 onChange={e => setNuevosPerros(p => { const np=[...p]; np[i]={...np[i], raza:e.target.value}; return np; })} />
+            </div>
+            <div style={{ marginTop:10 }}>
+              <label style={S.label}>Notas (opcional)</label>
+              <input style={{ ...S.input, marginBottom:0 }} placeholder="Ej. Perro ansioso, lleva snack" value={nuevosPerros[i]?.notas || ""}
+                onChange={e => setNuevosPerros(p => { const np=[...p]; np[i]={...np[i], notas:e.target.value}; return np; })} />
             </div>
           </div>
         ))}
@@ -558,6 +571,9 @@ export default function App() {
           setForm({ nombre: u.nombre, celular: u.celular, notas: u.notas || "", numPerros: newNum, perros: newPerros });
           setPlan(null); setDiasSel([]); setSemanaAviso(null);
           setScreen("plan");
+        , () => {
+          const sinNombre = nuevosPerros.some(p => !p.nombre.trim());
+          if (sinNombre) { alert("El nombre de cada perro es obligatorio"); return; }
         }}>Continuar</button>
         <button style={S.btnGhost} onClick={() => setScreen("misDias")}>← Volver</button>
       </div></div>
