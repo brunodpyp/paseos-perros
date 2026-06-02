@@ -122,6 +122,7 @@ export default function App() {
   const [loginErr, setLoginErr] = useState(false);
   const [usuarioActual, setUsuarioActual] = useState(null);
   const [cargando, setCargando] = useState(false);
+  const [nuevosPerros, setNuevosPerros] = useState([{nombre:"", raza:""}]);
 
 
   // Cargar bookings de Firebase al inicio
@@ -505,18 +506,60 @@ export default function App() {
           setScreen("plan");
         }}>+ Agregar más días</button>
         <button style={{ ...S.btnGhost, borderColor:"#f59e0b", color:"#f59e0b" }} onClick={() => {
-          // Add one more dog
-          const newNum = (u.numPerros || 1) + 1;
-          const newPerros = [...(u.perros || [{nombre:"",raza:""}]), {nombre:"",raza:""}];
-          setForm({ nombre: u.nombre, celular: u.celular, notas: u.notas || "", numPerros: newNum, perros: newPerros });
-          // Update in Firebase
-          const usuarioRef = doc(db, "usuarios", u.celular);
-          updateDoc(usuarioRef, { numPerros: newNum, perros: newPerros });
-          setUsuarioActual({ ...u, numPerros: newNum, perros: newPerros });
-          setPlan(null); setDiasSel([]); setSemanaAviso(null);
-          setScreen("plan");
+          setNuevosPerros([{nombre:"", raza:""}]);
+          setScreen("agregarPerro");
         }}>🐾 Agregar otro perro</button>
         <button style={S.btnGhost} onClick={() => setScreen("inicio")}>← Volver</button>
+      </div></div>
+    );
+  }
+
+  if (screen === "agregarPerro") {
+    const u = usuarioActual || {};
+    const maxPuedoAgregar = 4 - (u.numPerros || 1);
+    return (
+      <div style={S.root}><div style={S.wrap}>
+        <p style={S.title}>Agregar perros</p>
+        <p style={S.sub}>¿Cuántos perros quieres agregar?</p>
+        <div style={S.field}>
+          <label style={S.label}>Cantidad a agregar</label>
+          <div style={S.perrosBtns}>
+            {Array.from({length: maxPuedoAgregar}, (_, i) => i + 1).map(n => (
+              <button key={n} style={S.perroBtn(nuevosPerros.length === n)}
+                onClick={() => setNuevosPerros(Array.from({length:n}, (_,i) => nuevosPerros[i] || {nombre:"", raza:""}))}>
+                <div style={{ fontSize:15 }}>+{n}</div>
+                <div style={{ fontSize:11, marginTop:2 }}>{n===1?"perro":"perros"}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+        {nuevosPerros.map((_, i) => (
+          <div key={i} style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:12, padding:"14px", marginBottom:12 }}>
+            <p style={{ fontSize:13, fontWeight:700, color:"#f59e0b", margin:"0 0 10px" }}>Perro nuevo {i+1}</p>
+            <div style={S.field}>
+              <label style={S.label}>Nombre</label>
+              <input style={{ ...S.input, marginBottom:0 }} placeholder="Ej. Luna" value={nuevosPerros[i]?.nombre || ""}
+                onChange={e => setNuevosPerros(p => { const np=[...p]; np[i]={...np[i], nombre:e.target.value}; return np; })} />
+            </div>
+            <div style={{ marginTop:10 }}>
+              <label style={S.label}>Raza (opcional)</label>
+              <input style={{ ...S.input, marginBottom:0 }} placeholder="Ej. Poodle" value={nuevosPerros[i]?.raza || ""}
+                onChange={e => setNuevosPerros(p => { const np=[...p]; np[i]={...np[i], raza:e.target.value}; return np; })} />
+            </div>
+          </div>
+        ))}
+        <button style={S.btnPrimary} onClick={async () => {
+          const newNum = (u.numPerros || 1) + nuevosPerros.length;
+          const newPerros = [...(u.perros || []), ...nuevosPerros];
+          const usuarioRef = doc(db, "usuarios", u.celular);
+          await updateDoc(usuarioRef, { numPerros: newNum, perros: newPerros });
+          const newU = { ...u, numPerros: newNum, perros: newPerros };
+          setUsuarioActual(newU);
+          setForm({ nombre: u.nombre, celular: u.celular, notas: u.notas || "", numPerros: newNum, perros: newPerros });
+          setPlan(null); setDiasSel([]); setSemanaAviso(null);
+          setScreen("plan");
+        }}>Continuar</button>
+        <button style={S.btnGhost} onClick={() => setScreen("misDias")}>← Volver</button>
       </div></div>
     );
   }
