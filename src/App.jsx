@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { initializeApp } from "firebase/app";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs } from "firebase/firestore";
-import { getAuth, RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
+
 
 // Firebase config
 const firebaseConfig = {
@@ -15,7 +15,7 @@ const firebaseConfig = {
 
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getFirestore(firebaseApp);
-const auth = getAuth(firebaseApp);
+
 
 const MAX_DIA = 5;
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -122,11 +122,7 @@ export default function App() {
   const [loginErr, setLoginErr] = useState(false);
   const [usuarioActual, setUsuarioActual] = useState(null);
   const [cargando, setCargando] = useState(false);
-  const [codigoSMS, setCodigoSMS] = useState("");
-  const [confirmResult, setConfirmResult] = useState(null);
-  const [smsEnviado, setSmsEnviado] = useState(false);
-  const [smsError, setSmsError] = useState("");
-  const recaptchaRef = useRef(null);
+
 
   // Cargar bookings de Firebase al inicio
   useEffect(() => {
@@ -158,44 +154,14 @@ export default function App() {
     setScreen("plan");
   };
 
-  // SMS for "Ya estás registrado"
-  const enviarSMSLogin = async () => {
-    if (loginCel.length !== 10) { setLoginErr(true); setSmsError("Ingresa un número válido de 10 dígitos"); return; }
-    setSmsError(""); setLoginErr(false); setCargando(true);
-    // Check if number exists first
+  const login = async () => {
+    if (loginCel.length !== 10) { setLoginErr(true); return; }
+    setLoginErr(false); setCargando(true);
     const snap = await getDoc(doc(db, "usuarios", loginCel));
     if (!snap.exists()) { setLoginErr(true); setCargando(false); return; }
-    try {
-      if (window.recaptchaVerifier) { window.recaptchaVerifier.clear(); window.recaptchaVerifier = null; }
-      window.recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
-        size: "invisible",
-        callback: () => {}
-      });
-      await window.recaptchaVerifier.render();
-      const result = await signInWithPhoneNumber(auth, "+52" + loginCel, window.recaptchaVerifier);
-      setConfirmResult(result);
-      setSmsEnviado(true);
-    } catch (e) {
-      console.error(e);
-      setSmsError("Error al enviar el SMS. Intenta de nuevo.");
-      if (window.recaptchaVerifier) { window.recaptchaVerifier.clear(); window.recaptchaVerifier = null; }
-    }
+    setUsuarioActual({ celular: loginCel, ...snap.data() });
     setCargando(false);
-  };
-
-  const verificarCodigoLogin = async () => {
-    if (!codigoSMS || codigoSMS.length < 6) { setSmsError("Ingresa el código de 6 dígitos"); return; }
-    setSmsError(""); setCargando(true);
-    try {
-      await confirmResult.confirm(codigoSMS);
-      const snap = await getDoc(doc(db, "usuarios", loginCel));
-      setUsuarioActual({ celular: loginCel, ...snap.data() });
-      setSmsEnviado(false); setCodigoSMS(""); setConfirmResult(null);
-      setScreen("misDias");
-    } catch (e) {
-      setSmsError("Código incorrecto. Intenta de nuevo.");
-    }
-    setCargando(false);
+    setScreen("misDias");
   };
 
   const irACalendario = () => {
@@ -510,45 +476,20 @@ export default function App() {
   if (screen === "registrado") return (
     <div style={S.root}><div style={S.wrap}>
       <p style={S.title}>Ya estás registrado</p>
-      <p style={S.sub}>Ingresa tu número para verificar tu identidad</p>
-      <div id="recaptcha-container"></div>
-      {!smsEnviado ? (
-        <>
-          <div style={S.field}>
-            <label style={S.label}>Número celular</label>
-            <div style={S.phoneRow}>
-              <span style={S.phonePrefix}>🇲🇽 +52</span>
-              <input style={S.phoneInput} placeholder="10 dígitos" maxLength={10} value={loginCel}
-                onChange={e => { setLoginCel(e.target.value.replace(/\D/g,"")); setLoginErr(false); setSmsError(""); }} />
-            </div>
-            {loginErr && <p style={S.err}>Número no encontrado en el sistema</p>}
-            {smsError && <p style={S.err}>{smsError}</p>}
-          </div>
-          <button style={{ ...S.btnPrimary, opacity: cargando ? 0.6 : 1 }} onClick={enviarSMSLogin} disabled={cargando}>
-            {cargando ? "Enviando código..." : "Enviar código de verificación"}
-          </button>
-        </>
-      ) : (
-        <>
-          <div style={{ ...S.infoBox, marginBottom:12, color:"#4ade80", borderColor:"#14532d" }}>
-            ✅ Código enviado a +52 {loginCel}
-          </div>
-          <div style={S.field}>
-            <label style={S.label}>Código de verificación</label>
-            <input style={{ ...S.input, letterSpacing:8, fontSize:20, textAlign:"center" }}
-              placeholder="------" maxLength={6} value={codigoSMS}
-              onChange={e => setCodigoSMS(e.target.value.replace(/\D/g,""))} />
-          </div>
-          {smsError && <p style={S.err}>{smsError}</p>}
-          <button style={{ ...S.btnPrimary, opacity: cargando ? 0.6 : 1 }} onClick={verificarCodigoLogin} disabled={cargando}>
-            {cargando ? "Verificando..." : "Verificar"}
-          </button>
-          <button style={S.btnGhost} onClick={() => { setSmsEnviado(false); setCodigoSMS(""); setSmsError(""); if(window.recaptchaVerifier){window.recaptchaVerifier.clear();window.recaptchaVerifier=null;} }}>
-            Cambiar número
-          </button>
-        </>
-      )}
-      <button style={S.btnGhost} onClick={() => { setScreen("inicio"); setSmsEnviado(false); setCodigoSMS(""); setSmsError(""); }}>← Volver</button>
+      <p style={S.sub}>Ingresa tu número para ver tus reservaciones</p>
+      <div style={S.field}>
+        <label style={S.label}>Número celular</label>
+        <div style={S.phoneRow}>
+          <span style={S.phonePrefix}>🇲🇽 +52</span>
+          <input style={S.phoneInput} placeholder="10 dígitos" maxLength={10} value={loginCel}
+            onChange={e => { setLoginCel(e.target.value.replace(/\D/g,"")); setLoginErr(false); }} />
+        </div>
+        {loginErr && <p style={S.err}>Número no encontrado en el sistema</p>}
+      </div>
+      <button style={{ ...S.btnPrimary, opacity: cargando ? 0.6 : 1 }} onClick={login} disabled={cargando}>
+        {cargando ? "Buscando..." : "Ver mis reservaciones"}
+      </button>
+      <button style={S.btnGhost} onClick={() => setScreen("inicio")}>← Volver</button>
     </div></div>
   );
 
