@@ -123,7 +123,9 @@ export default function App() {
   const [usuarioActual, setUsuarioActual] = useState(null);
   const [cargando, setCargando] = useState(false);
   const [nuevosPerros, setNuevosPerros] = useState([{nombre:"", raza:"", notas:""}]);
-  const [diasBloqueados, setDiasBloqueados] = useState([]); // dias ya reservados por este usuario
+  const [diasBloqueados, setDiasBloqueados] = useState([]);
+  const [pantallaAnterior, setPantallaAnterior] = useState("registro"); // para saber a donde regresar
+  const [perrosNuevosCount, setPerrosNuevosCount] = useState(1); // cuantos perros nuevos se estan agregando
 
 
   // Cargar bookings de Firebase al inicio
@@ -155,6 +157,7 @@ export default function App() {
     const sinNombre = form.perros.some(p => !p.nombre.trim());
     if (sinNombre) { setErrors({ perros: "El nombre de cada perro es obligatorio" }); setCargando(false); return; }
     setErrors({}); setPlan(null); setDiasSel([]); setSemanaAviso(null);
+    setPantallaAnterior("registro"); setPerrosNuevosCount(0);
     setCargando(false);
     setScreen("plan");
   };
@@ -396,13 +399,13 @@ export default function App() {
         <div style={S.planCard(plan === "semanal")} onClick={() => { setPlan("semanal"); setErrors({}); }}>
           <div style={S.planEmoji}>📦</div>
           <div style={S.planName}>Paquete semanal</div>
-          <div style={S.planPrice}>${[500,800,1200,1600][form.numPerros-1]}</div>
-          <div style={S.planSub}>${[100,160,240,320][form.numPerros-1]}/día · 5 días seguidos</div>
+          <div style={S.planPrice}>${perrosNuevosCount > 0 ? [500,800,1200,1600][perrosNuevosCount-1] : [500,800,1200,1600][form.numPerros-1]}</div>
+          <div style={S.planSub}>${perrosNuevosCount > 0 ? [100,160,240,320][perrosNuevosCount-1] : [100,160,240,320][form.numPerros-1]}/día · 5 días seguidos</div>
         </div>
         <div style={S.planCard(plan === "individual")} onClick={() => { setPlan("individual"); setErrors({}); }}>
           <div style={S.planEmoji}>🎟️</div>
           <div style={S.planName}>Paseo individual</div>
-          <div style={S.planPrice}>${[150,300,450,600][form.numPerros-1]}</div>
+          <div style={S.planPrice}>${perrosNuevosCount > 0 ? [150,300,450,600][perrosNuevosCount-1] : [150,300,450,600][form.numPerros-1]}</div>
           <div style={S.planSub}>por día · días libres</div>
         </div>
       </div>
@@ -413,14 +416,14 @@ export default function App() {
           <p style={{ fontSize:13, color:"#94a3b8", margin:0 }}>Todos los paseos son a las <strong style={{ color:"#f59e0b" }}>7:00 AM</strong>, de lunes a viernes</p>
         </div>
       </div>
-      {form.numPerros > 1 && (
+      {(perrosNuevosCount > 1 || (perrosNuevosCount === 0 && form.numPerros > 1)) && (
         <div style={{ ...S.infoBox, borderColor:"#92400e", color:"#fde68a", marginBottom:16 }}>
-          💡 Descuento por volumen aplicado para <strong>{form.numPerros} perros</strong>
+          💡 Descuento por volumen aplicado
         </div>
       )}
       {errors.plan && <p style={{ ...S.err, marginBottom:8 }}>{errors.plan}</p>}
       <button style={S.btnPrimary} onClick={irACalendario}>Elegir fecha</button>
-      <button style={S.btnGhost} onClick={() => setScreen("registro")}>Cancelar</button>
+      <button style={S.btnGhost} onClick={() => setScreen(pantallaAnterior === "misDias" ? "misDias" : "registro")}>Cancelar</button>
     </div></div>
   );
 
@@ -448,7 +451,7 @@ export default function App() {
       <button style={{ ...S.btnPrimary, opacity: cargando ? 0.6 : 1 }} onClick={reservar} disabled={cargando}>
         {cargando ? "Guardando..." : "Reservar"}
       </button>
-      <button style={S.btnGhost} onClick={() => setScreen("plan")}>Cancelar</button>
+      <button style={S.btnGhost} onClick={() => setScreen(pantallaAnterior === "misDias" ? "misDias" : "plan")}>Cancelar</button>
     </div></div>
   );
 
@@ -508,13 +511,16 @@ export default function App() {
         </div>
         <button style={S.btnPrimary} onClick={() => {
           setForm({ nombre: u.nombre, celular: u.celular, notas: u.notas || "", numPerros: u.numPerros || 1, perros: u.perros || [{nombre:"",raza:""}] });
-          setDiasBloqueados(u.dias || []); // bloquear dias ya reservados
+          setDiasBloqueados(u.dias || []);
+          setPantallaAnterior("misDias");
+          setPerrosNuevosCount(0);
           setPlan(null); setDiasSel([]); setSemanaAviso(null);
           setScreen("plan");
         }}>+ Agregar más días</button>
         <button style={{ ...S.btnGhost, borderColor:"#f59e0b", color:"#f59e0b" }} onClick={() => {
           setNuevosPerros([{nombre:"", raza:"", notas:""}]);
-          setDiasBloqueados([]); // al agregar perro nuevo no bloquear dias
+          setDiasBloqueados([]);
+          setPantallaAnterior("agregarPerro");
           setScreen("agregarPerro");
         }}>🐾 Agregar otro perro</button>
         <button style={S.btnGhost} onClick={() => setScreen("inicio")}>← Volver</button>
@@ -571,6 +577,8 @@ export default function App() {
           const newU = { ...u, numPerros: newNum, perros: newPerros };
           setUsuarioActual(newU);
           setForm({ nombre: u.nombre, celular: u.celular, notas: u.notas || "", numPerros: newNum, perros: newPerros });
+          setPantallaAnterior("misDias");
+          setPerrosNuevosCount(nuevosPerros.length);
           setPlan(null); setDiasSel([]); setSemanaAviso(null);
           setScreen("plan");
         }}>Continuar</button>
