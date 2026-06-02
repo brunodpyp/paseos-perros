@@ -166,13 +166,17 @@ export default function App() {
     const snap = await getDoc(doc(db, "usuarios", loginCel));
     if (!snap.exists()) { setLoginErr(true); setCargando(false); return; }
     try {
-      if (!window.recaptchaVerifier) {
-        window.recaptchaVerifier = new RecaptchaVerifier(auth, recaptchaRef.current, { size: "invisible" });
-      }
+      if (window.recaptchaVerifier) { window.recaptchaVerifier.clear(); window.recaptchaVerifier = null; }
+      window.recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
+        size: "invisible",
+        callback: () => {}
+      });
+      await window.recaptchaVerifier.render();
       const result = await signInWithPhoneNumber(auth, "+52" + loginCel, window.recaptchaVerifier);
       setConfirmResult(result);
       setSmsEnviado(true);
     } catch (e) {
+      console.error(e);
       setSmsError("Error al enviar el SMS. Intenta de nuevo.");
       if (window.recaptchaVerifier) { window.recaptchaVerifier.clear(); window.recaptchaVerifier = null; }
     }
@@ -507,7 +511,7 @@ export default function App() {
     <div style={S.root}><div style={S.wrap}>
       <p style={S.title}>Ya estás registrado</p>
       <p style={S.sub}>Ingresa tu número para verificar tu identidad</p>
-      <div ref={recaptchaRef}></div>
+      <div id="recaptcha-container"></div>
       {!smsEnviado ? (
         <>
           <div style={S.field}>
