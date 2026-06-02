@@ -186,7 +186,7 @@ export default function App() {
     const todayMidnight = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
     const bloqueados = cinco.filter(k => {
       const d = keyToDate(k);
-      return (MAX_DIA - getCount(k)) < form.numPerros || d <= todayMidnight || diasBloqueados.includes(k);
+      const ptr = perrosNuevosCount > 0 ? perrosNuevosCount : form.numPerros; return (MAX_DIA - getCount(k)) < ptr || d <= todayMidnight || diasBloqueados.includes(k);
     });
     if (bloqueados.length > 0) {
       setSemanaAviso(`Uno o más días de esa semana no tienen espacio para ${form.numPerros} perro${form.numPerros>1?"s":""}. Intenta otra semana.`);
@@ -199,8 +199,9 @@ export default function App() {
   const toggleDiaIndividual = (key) => {
     setSemanaAviso(null);
     const remaining = MAX_DIA - getCount(key);
-    if (remaining < form.numPerros) {
-      setSemanaAviso(`Este día no tiene espacio para ${form.numPerros} perro${form.numPerros>1?"s":""}.`);
+    const ptr2 = perrosNuevosCount > 0 ? perrosNuevosCount : form.numPerros;
+    if (remaining < ptr2) {
+      setSemanaAviso(`Este día no tiene espacio para ${ptr2} perro${ptr2>1?"s":""}.`);
       return;
     }
     setDiasSel(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
@@ -286,7 +287,8 @@ export default function App() {
             const isPast = new Date(calAnio, calMes, day) < new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
             const count = getCount(key);
             const remaining = MAX_DIA - count;
-            const full = remaining < form.numPerros;
+            const perrosParaReservar = perrosNuevosCount > 0 ? perrosNuevosCount : form.numPerros;
+            const full = remaining < perrosParaReservar;
             const almost = remaining <= 2 && !full;
             const selected = diasSel.includes(key);
             const isBloqueado = diasBloqueados.includes(key);
@@ -530,7 +532,7 @@ export default function App() {
 
   if (screen === "agregarPerro") {
     const u = usuarioActual || {};
-    const maxPuedoAgregar = Math.max(1, 4 - (u.numPerros || 1));
+    const numActual = parseInt(u.numPerros) || 1; const maxPuedoAgregar = Math.max(1, 4 - numActual);
     return (
       <div style={S.root}><div style={S.wrap}>
         <p style={S.title}>Agregar perros</p>
