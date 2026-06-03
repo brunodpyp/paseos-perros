@@ -245,10 +245,11 @@ export default function App() {
         });
       }
       // Actualizar bookings en Firestore
+      const perrosAReservar = perrosNuevosCount > 0 ? perrosNuevosCount : form.numPerros;
       const newBookings = { ...bookings };
       for (const k of diasSel) {
         const bookingRef = doc(db, "bookings", k);
-        const nuevoCount = (newBookings[k] || 0) + form.numPerros;
+        const nuevoCount = (newBookings[k] || 0) + perrosAReservar;
         await setDoc(bookingRef, { count: nuevoCount });
         newBookings[k] = nuevoCount;
       }
