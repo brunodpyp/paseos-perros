@@ -228,7 +228,8 @@ export default function App() {
     if (diasSel.length === 0) { setErrors({ dias:"Selecciona al menos un día" }); return; }
     setErrors({}); setCargando(true);
     try {
-      const usuarioRef = doc(db, "usuarios", form.celular);
+      const celular = usuarioActual?.celular || form.celular;
+      const usuarioRef = doc(db, "usuarios", celular);
       const usuarioSnap = await getDoc(usuarioRef);
       // Actualizar días del perro activo
       if (usuarioSnap.exists()) {
@@ -244,7 +245,7 @@ export default function App() {
         // Nuevo usuario — guardar con perros y días
         const perrosConDias = form.perros.map((p, i) => ({ ...p, dias: i === (perroActivo?.idx || 0) ? diasSel : [] }));
         await setDoc(usuarioRef, {
-          nombre: form.nombre, celular: form.celular, notas: form.notas,
+          nombre: form.nombre, celular: celular, notas: form.notas,
           perros: perrosConDias, fechaRegistro: new Date().toLocaleDateString("es-MX"),
         });
       }
