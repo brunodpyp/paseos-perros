@@ -545,7 +545,7 @@ export default function App() {
             <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:10 }}>
               <button style={S.btnSmallAmber} onClick={() => {
                 setPerroActivo({ idx, nombre: perro.nombre });
-                setDiasBloqueados([]);
+                setDiasBloqueados(perro.dias || []);
                 setPlan(null); setDiasSel([]); setSemanaAviso(null);
                 setScreen("plan");
               }}>+ Reservar para {perro.nombre}</button>
