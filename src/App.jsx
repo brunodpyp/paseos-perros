@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { initializeApp } from "firebase/app";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs } from "firebase/firestore";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDUXfzHRLZMb6Rtr3eAKjLBXoDJM_7cUe4",
@@ -251,12 +251,21 @@ export default function App() {
           perros: perrosConDias, fechaRegistro: new Date().toLocaleDateString("es-MX"),
         });
       }
-      // Actualizar bookings
+      // Actualizar bookings con info del dueño y perro
+      const celularUsado = usuarioActual?.celular || form.celular;
+      const nombreDueno = usuarioActual?.nombre || form.nombre;
+      const nombrePerro = perroActivo ? (usuarioActual?.perros?.[perroActivo.idx]?.nombre || form.perros?.[perroActivo.idx]?.nombre || "") : "";
       const newBookings = { ...bookings };
       for (const k of diasSel) {
         const bookingRef = doc(db, "bookings", k);
-        const nuevoCount = (newBookings[k] || 0) + 1;
-        await setDoc(bookingRef, { count: nuevoCount });
+        const snapB = await getDoc(bookingRef);
+        const dataB = snapB.exists() ? snapB.data() : { count: 0, reservas: [] };
+        const reservasActuales = dataB.reservas || [];
+        const nuevoCount = (dataB.count || 0) + 1;
+        await setDoc(bookingRef, {
+          count: nuevoCount,
+          reservas: [...reservasActuales, { dueno: nombreDueno, celular: celularUsado, perro: nombrePerro }]
+        });
         newBookings[k] = nuevoCount;
       }
       setBookings(newBookings);
@@ -471,13 +480,9 @@ export default function App() {
       }}>
         {usuarioActual ? "Ver mis reservaciones" : "Volver al inicio"}
       </button>
-      {perroActivo && (
-        <button style={{ ...S.btnGhost, borderColor:"#ef4444", color:"#ef4444" }} onClick={() => {
-          setCancelarPerroIdx(perroActivo.idx);
-          setDiasACancelar([]);
-          setScreen("cancelar");
-        }}>Cancelar mi reservación</button>
-      )}
+      <p style={{ fontSize:13, color:"#64748b", textAlign:"center", marginTop:8 }}>
+        ¿Necesitas cancelar? Entra a <strong style={{ color:"#94a3b8" }}>¿Ya estás registrado?</strong> para gestionar tus reservaciones.
+      </p>
     </div></div>
   );
 
@@ -658,11 +663,31 @@ export default function App() {
         };
         await updateDoc(doc(db, "usuarios", celular), { perros: perrosActualizados });
         // Restar de bookings
+        const celularCancelar = u.celular;
+        const nombrePerroCancelar = perros[cancelarPerroIdx]?.nombre || "";
         const newBookings = { ...bookings };
         for (const k of diasACancelar) {
-          const nuevoCount = Math.max(0, (newBookings[k] || 0) - 1);
-          await setDoc(doc(db, "bookings", k), { count: nuevoCount });
-          newBookings[k] = nuevoCount;
+          const bookingRef = doc(db, "bookings", k);
+          const snapB = await getDoc(bookingRef);
+          if (snapB.exists()) {
+            const dataB = snapB.data();
+            const nuevoCount = Math.max(0, (dataB.count || 0) - 1);
+            if (nuevoCount === 0) {
+              await deleteDoc(bookingRef);
+              delete newBookings[k];
+            } else {
+              let removido = false;
+              const reservasFiltradas = (dataB.reservas || []).filter(r => {
+                if (!removido && r.celular === celularCancelar && r.perro === nombrePerroCancelar) {
+                  removido = true;
+                  return false;
+                }
+                return true;
+              });
+              await setDoc(bookingRef, { count: nuevoCount, reservas: reservasFiltradas });
+              newBookings[k] = nuevoCount;
+            }
+          }
         }
         setBookings(newBookings);
         setUsuarioActual({ ...u, perros: perrosActualizados });
