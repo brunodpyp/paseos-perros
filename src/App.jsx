@@ -198,7 +198,7 @@ export default function App() {
     const todayMidnight = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
     const bloqueados = cinco.filter(k => {
       const d = keyToDate(k);
-      return (MAX_DIA - getCount(k)) < 1 || d <= todayMidnight || diasBloqueados.includes(k);
+      return getCount(k) >= MAX_DIA || d <= todayMidnight || diasBloqueados.includes(k);
     });
     if (bloqueados.length > 0) {
       setSemanaAviso("Uno o más días de esa semana no tienen espacio. Intenta otra semana.");
@@ -209,7 +209,7 @@ export default function App() {
 
   const toggleDiaIndividual = (key) => {
     setSemanaAviso(null);
-    if (MAX_DIA - getCount(key) < 1) { setSemanaAviso("Este día no tiene espacio disponible."); return; }
+    if (getCount(key) >= MAX_DIA) { setSemanaAviso("Este día no tiene espacio disponible."); return; }
     setDiasSel(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
   };
 
@@ -320,6 +320,7 @@ export default function App() {
             const isBloqueado = diasBloqueados.includes(key);
             const count = getCount(key);
             const full = count >= MAX_DIA;
+            // full is simply when all 5 spots are taken
             const almost = count >= 3 && !full;
             const selected = diasSel.includes(key);
             let status = "available";
