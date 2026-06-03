@@ -107,7 +107,7 @@ function CalDay({ day, keyStr, count, status, onToggle, calYear, calMonth }) {
   else if (status === "available") { bg="#052e16"; color="#4ade80"; border="1px solid #14532d"; }
   if (isToday && status !== "selected") color = "#fff";
   return (
-    <div onClick={() => (status === "available" || status === "selected") ? onToggle(keyStr) : null}
+    <div onClick={() => (status === "available" || status === "selected" || status === "almost") ? onToggle(keyStr) : null}
       style={{ borderRadius:7, padding:"5px 2px", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:44, fontSize:13, border, background:bg, color, cursor }}>
       <span style={{ fontWeight: isToday ? 700 : 500 }}>{day}</span>
       {status !== "weekend" && <span style={{ fontSize:9, marginTop:2, opacity:0.85 }}>{count >= MAX_DIA ? "lleno" : `${count}/${MAX_DIA}`}</span>}
@@ -195,10 +195,11 @@ export default function App() {
     setSemanaAviso(null);
     if (diasSel.includes(key)) { setDiasSel([]); return; }
     const cinco = get5HabilesDesde(key);
-    const todayMidnight = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+    const ahora = new Date();
+    const todayMidnight = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
     const bloqueados = cinco.filter(k => {
       const d = keyToDate(k);
-      return getCount(k) >= MAX_DIA || d <= todayMidnight || diasBloqueados.includes(k);
+      return getCount(k) >= MAX_DIA || d < todayMidnight || diasBloqueados.includes(k);
     });
     if (bloqueados.length > 0) {
       setSemanaAviso("Uno o más días de esa semana no tienen espacio. Intenta otra semana.");
@@ -316,7 +317,7 @@ export default function App() {
             const dow = new Date(calAnio, calMes, day).getDay();
             const isWeekend = dow === 0 || dow === 6;
             const isToday = calAnio === hoy.getFullYear() && calMes === hoy.getMonth() && day === hoy.getDate();
-            const isPast = new Date(calAnio, calMes, day) < new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+            const ahora2 = new Date(); const isPast = new Date(calAnio, calMes, day) < new Date(ahora2.getFullYear(), ahora2.getMonth(), ahora2.getDate());
             const isBloqueado = diasBloqueados.includes(key);
             const count = getCount(key);
             const full = count >= MAX_DIA;
@@ -544,7 +545,7 @@ export default function App() {
             <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:10 }}>
               <button style={S.btnSmallAmber} onClick={() => {
                 setPerroActivo({ idx, nombre: perro.nombre });
-                setDiasBloqueados(perro.dias || []);
+                setDiasBloqueados([]);
                 setPlan(null); setDiasSel([]); setSemanaAviso(null);
                 setScreen("plan");
               }}>+ Reservar para {perro.nombre}</button>
