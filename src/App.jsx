@@ -269,7 +269,23 @@ export default function App() {
         newBookings[k] = nuevoCount;
       }
       setBookings(newBookings);
-      setScreen("gracias");
+
+      // Check if there are more dogs without days
+      const perrosActuales = usuarioActual?.perros || [];
+      const snapFresh = await getDoc(doc(db, "usuarios", celular));
+      const perrosFresh = snapFresh.exists() ? snapFresh.data().perros || [] : perrosActuales;
+      if (snapFresh.exists()) setUsuarioActual({ celular, ...snapFresh.data() });
+
+      const siguienteIdx = perrosFresh.findIndex((p, i) => i > (perroActivo?.idx ?? -1) && (!p.dias || p.dias.length === 0));
+      if (siguienteIdx !== -1) {
+        // Go directly to plan for next dog
+        setPerroActivo({ idx: siguienteIdx, nombre: perrosFresh[siguienteIdx].nombre });
+        setDiasBloqueados([]);
+        setPlan(null); setDiasSel([]); setSemanaAviso(null);
+        setScreen("plan");
+      } else {
+        setScreen("gracias");
+      }
     } catch (e) { setErrors({ dias:"Ocurrió un error, intenta de nuevo." }); }
     setCargando(false);
   };
@@ -277,6 +293,7 @@ export default function App() {
   const reiniciar = () => {
     setForm({ nombre:"", celular:"", notas:"", numPerros:1, perros:[{nombre:"", raza:""}] });
     setPlan(null); setDiasSel([]); setSemanaAviso(null); setDiasBloqueados([]); setPerroActivo(null);
+    setUsuarioActual(null); setLoginCel("");
     setScreen("inicio");
   };
 
@@ -475,14 +492,15 @@ export default function App() {
         {[...diasSel].sort().map(k => <span key={k} style={S.chip}>{formatFecha(k)}</span>)}
       </div>
       <button style={S.btnPrimary} onClick={() => {
-        if (usuarioActual) { setDiasSel([]); setSemanaAviso(null); setScreen("misDias"); }
-        else reiniciar();
-      }}>
-        {usuarioActual ? "Ver mis reservaciones" : "Volver al inicio"}
-      </button>
-      <p style={{ fontSize:13, color:"#64748b", textAlign:"center", marginTop:8 }}>
-        ¿Necesitas cancelar? Entra a <strong style={{ color:"#94a3b8" }}>¿Ya estás registrado?</strong> para gestionar tus reservaciones.
-      </p>
+        setDiasSel([]); setSemanaAviso(null);
+        setScreen("misDias");
+      }}>Ver mis reservaciones</button>
+      <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:12, padding:"12px 14px", marginTop:4, textAlign:"center" }}>
+        <p style={{ fontSize:12, color:"#64748b", margin:"0 0 4px" }}>¿Necesitas cancelar?</p>
+        <p style={{ fontSize:13, color:"#ef4444", fontWeight:700, margin:0, letterSpacing:0.5 }}>
+          ENTRA A "¿YA ESTÁS REGISTRADO?" → CANCELAR
+        </p>
+      </div>
     </div></div>
   );
 
@@ -521,21 +539,21 @@ export default function App() {
                 <p style={S.perroNombre}>{perro.nombre}</p>
                 {perro.raza && <p style={S.perroRaza}>{perro.raza}</p>}
               </div>
-              <div style={{ display:"flex", gap:6 }}>
-                <button style={S.btnSmallAmber} onClick={() => {
-                  setPerroActivo({ idx, nombre: perro.nombre });
-                  setDiasBloqueados(perro.dias || []);
-                  setPlan(null); setDiasSel([]); setSemanaAviso(null);
-                  setScreen("plan");
-                }}>+ Reservar días</button>
-                {perro.dias && perro.dias.length > 0 && (
-                  <button style={{ ...S.btnSmall, borderColor:"#ef4444", color:"#ef4444" }} onClick={() => {
-                    setCancelarPerroIdx(idx);
-                    setDiasACancelar([]);
-                    setScreen("cancelar");
-                  }}>Cancelar</button>
-                )}
-              </div>
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:10 }}>
+              <button style={S.btnSmallAmber} onClick={() => {
+                setPerroActivo({ idx, nombre: perro.nombre });
+                setDiasBloqueados(perro.dias || []);
+                setPlan(null); setDiasSel([]); setSemanaAviso(null);
+                setScreen("plan");
+              }}>+ Reservar para {perro.nombre}</button>
+              {perro.dias && perro.dias.length > 0 && (
+                <button style={{ ...S.btnSmall, borderColor:"#ef4444", color:"#ef4444", width:"100%", padding:"6px 0", textAlign:"center" }} onClick={() => {
+                  setCancelarPerroIdx(idx);
+                  setDiasACancelar([]);
+                  setScreen("cancelar");
+                }}>Cancelar reservación de {perro.nombre}</button>
+              )}
             </div>
             <div>
               {!perro.dias || perro.dias.length === 0
@@ -552,7 +570,7 @@ export default function App() {
             setScreen("agregarPerro");
           }}>🐾 Agregar otro perro</button>
         )}
-        <button style={S.btnGhost} onClick={() => setScreen("inicio")}>← Volver</button>
+        <button style={S.btnGhost} onClick={() => { setUsuarioActual(null); setLoginCel(""); setScreen("inicio"); }}>← Volver</button>
       </div></div>
     );
   }
