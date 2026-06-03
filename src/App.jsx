@@ -137,6 +137,8 @@ export default function App() {
   const [usuarioActual, setUsuarioActual] = useState(null);
   // Agregar perro nuevo
   const [nuevosPerros, setNuevosPerros] = useState([{nombre:"", raza:"", notas:""}]);
+  const [cancelarPerroIdx, setCancelarPerroIdx] = useState(null);
+  const [diasACancelar, setDiasACancelar] = useState([]);
 
   useEffect(() => {
     const cargarBookings = async () => {
@@ -469,6 +471,13 @@ export default function App() {
       }}>
         {usuarioActual ? "Ver mis reservaciones" : "Volver al inicio"}
       </button>
+      {perroActivo && (
+        <button style={{ ...S.btnGhost, borderColor:"#ef4444", color:"#ef4444" }} onClick={() => {
+          setCancelarPerroIdx(perroActivo.idx);
+          setDiasACancelar([]);
+          setScreen("cancelar");
+        }}>Cancelar mi reservación</button>
+      )}
     </div></div>
   );
 
@@ -507,12 +516,21 @@ export default function App() {
                 <p style={S.perroNombre}>{perro.nombre}</p>
                 {perro.raza && <p style={S.perroRaza}>{perro.raza}</p>}
               </div>
-              <button style={S.btnSmallAmber} onClick={() => {
-                setPerroActivo({ idx, nombre: perro.nombre });
-                setDiasBloqueados(perro.dias || []);
-                setPlan(null); setDiasSel([]); setSemanaAviso(null);
-                setScreen("plan");
-              }}>+ Reservar días</button>
+              <div style={{ display:"flex", gap:6 }}>
+                <button style={S.btnSmallAmber} onClick={() => {
+                  setPerroActivo({ idx, nombre: perro.nombre });
+                  setDiasBloqueados(perro.dias || []);
+                  setPlan(null); setDiasSel([]); setSemanaAviso(null);
+                  setScreen("plan");
+                }}>+ Reservar días</button>
+                {perro.dias && perro.dias.length > 0 && (
+                  <button style={{ ...S.btnSmall, borderColor:"#ef4444", color:"#ef4444" }} onClick={() => {
+                    setCancelarPerroIdx(idx);
+                    setDiasACancelar([]);
+                    setScreen("cancelar");
+                  }}>Cancelar</button>
+                )}
+              </div>
             </div>
             <div>
               {!perro.dias || perro.dias.length === 0
@@ -593,6 +611,114 @@ export default function App() {
           setCargando(false);
           setScreen("plan");
         }}>Continuar</button>
+        <button style={S.btnGhost} onClick={() => setScreen("misDias")}>← Volver</button>
+      </div></div>
+    );
+  }
+
+  if (screen === "cancelar") {
+    const u = usuarioActual || {};
+    const perros = u.perros || [];
+    const perro = perros[cancelarPerroIdx] || {};
+    const dias = [...(perro.dias || [])].sort();
+
+    // Agrupar días en semanas (lun-vie consecutivos)
+    const semanas = [];
+    const diasUsados = new Set();
+    dias.forEach(k => {
+      if (diasUsados.has(k)) return;
+      const cinco = get5HabilesDesde(k);
+      const coinciden = cinco.filter(d => dias.includes(d));
+      if (coinciden.length === 5) {
+        semanas.push({ tipo:"semanal", dias: cinco, label: `${formatFecha(cinco[0])} – ${formatFecha(cinco[4])}` });
+        cinco.forEach(d => diasUsados.add(d));
+      }
+    });
+    // Días sueltos (no en ninguna semana completa)
+    const diasSueltos = dias.filter(d => !diasUsados.has(d));
+
+    const toggleCancelar = (key) => {
+      setDiasACancelar(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
+    };
+    const toggleSemana = (diasSemana) => {
+      const todosSeleccionados = diasSemana.every(d => diasACancelar.includes(d));
+      if (todosSeleccionados) setDiasACancelar(prev => prev.filter(d => !diasSemana.includes(d)));
+      else setDiasACancelar(prev => [...new Set([...prev, ...diasSemana])]);
+    };
+
+    const confirmarCancelacion = async () => {
+      if (diasACancelar.length === 0) { alert("Selecciona al menos un día o semana para cancelar"); return; }
+      setCargando(true);
+      try {
+        const celular = u.celular;
+        const perrosActualizados = [...perros];
+        perrosActualizados[cancelarPerroIdx] = {
+          ...perrosActualizados[cancelarPerroIdx],
+          dias: (perrosActualizados[cancelarPerroIdx].dias || []).filter(d => !diasACancelar.includes(d))
+        };
+        await updateDoc(doc(db, "usuarios", celular), { perros: perrosActualizados });
+        // Restar de bookings
+        const newBookings = { ...bookings };
+        for (const k of diasACancelar) {
+          const nuevoCount = Math.max(0, (newBookings[k] || 0) - 1);
+          await setDoc(doc(db, "bookings", k), { count: nuevoCount });
+          newBookings[k] = nuevoCount;
+        }
+        setBookings(newBookings);
+        setUsuarioActual({ ...u, perros: perrosActualizados });
+        setDiasACancelar([]);
+        setScreen("misDias");
+      } catch(e) { alert("Ocurrió un error, intenta de nuevo."); }
+      setCargando(false);
+    };
+
+    return (
+      <div style={S.root}><div style={S.wrap}>
+        <p style={S.title}>Cancelar reservación</p>
+        <p style={S.sub}>Selecciona los días que quieres cancelar para <strong style={{ color:"#f59e0b" }}>{perro.nombre}</strong></p>
+
+        {semanas.length > 0 && (
+          <>
+            <p style={S.secLabel}>Semanas</p>
+            {semanas.map((sem, i) => {
+              const seleccionada = sem.dias.every(d => diasACancelar.includes(d));
+              return (
+                <div key={i} onClick={() => toggleSemana(sem.dias)}
+                  style={{ background: seleccionada ? "#450a0a" : "#1e293b", border: seleccionada ? "1px solid #ef4444" : "1px solid #334155", borderRadius:12, padding:"12px 14px", marginBottom:8, cursor:"pointer", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <span style={{ fontSize:14, color: seleccionada ? "#ef4444" : "#f8fafc" }}>📅 {sem.label}</span>
+                  <span style={{ fontSize:12, color: seleccionada ? "#ef4444" : "#64748b" }}>{seleccionada ? "✓ Seleccionada" : "5 días"}</span>
+                </div>
+              );
+            })}
+          </>
+        )}
+
+        {diasSueltos.length > 0 && (
+          <>
+            <p style={{ ...S.secLabel, marginTop: semanas.length > 0 ? 12 : 0 }}>Días individuales</p>
+            <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginBottom:16 }}>
+              {diasSueltos.map(k => {
+                const sel = diasACancelar.includes(k);
+                return (
+                  <div key={k} onClick={() => toggleCancelar(k)}
+                    style={{ padding:"8px 14px", borderRadius:20, fontSize:13, cursor:"pointer", background: sel ? "#450a0a" : "#1e293b", color: sel ? "#ef4444" : "#94a3b8", border: sel ? "1px solid #ef4444" : "1px solid #334155" }}>
+                    {formatFecha(k)}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        {diasACancelar.length > 0 && (
+          <div style={{ ...S.infoBox, borderColor:"#ef4444", color:"#fca5a5", marginBottom:14 }}>
+            ⚠️ Se cancelarán <strong>{diasACancelar.length} día{diasACancelar.length>1?"s":""}</strong>. Esta acción no se puede deshacer.
+          </div>
+        )}
+
+        <button style={{ ...S.btnPrimary, background:"#ef4444", opacity: cargando ? 0.6 : 1 }} onClick={confirmarCancelacion} disabled={cargando}>
+          {cargando ? "Cancelando..." : "Confirmar cancelación"}
+        </button>
         <button style={S.btnGhost} onClick={() => setScreen("misDias")}>← Volver</button>
       </div></div>
     );
