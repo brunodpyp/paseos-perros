@@ -289,6 +289,24 @@ export default function App() {
         setPlan(null); setDiasSel([]); setSemanaAviso(null);
         setScreen("plan");
       } else {
+        // Send email notification
+        try {
+          const celularNotif = usuarioActual?.celular || form.celular;
+          const nombreNotif = usuarioActual?.nombre || form.nombre;
+          const perroNotif = perroActivo ? (usuarioActual?.perros?.[perroActivo.idx]?.nombre || form.perros?.[perroActivo.idx]?.nombre || "") : "";
+          await fetch(`https://formsubmit.co/brunodpyp@gmail.com`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Accept": "application/json" },
+            body: JSON.stringify({
+              _subject: "Nueva reservación - Paseador de perros",
+              Nombre: nombreNotif,
+              Celular: celularNotif,
+              Perro: perroNotif,
+              Dias: diasSel.join(", "),
+              Plan: plan,
+            })
+          });
+        } catch(e) { console.log("Email notification failed", e); }
         setScreen("gracias");
       }
     } catch (e) { setErrors({ dias:"Ocurrió un error, intenta de nuevo." }); }
@@ -476,6 +494,24 @@ export default function App() {
           <p style={{ fontSize:13, color:"#94a3b8", margin:0 }}>Todos los paseos son a las <strong style={{ color:"#f59e0b" }}>7:00 AM</strong>, de lunes a viernes</p>
         </div>
       </div>
+      {plan === "semanal" && (
+        <div style={{ ...S.infoBox, marginBottom:14 }}>
+          📊 Lugares disponibles esta semana:
+          {(() => {
+            const ahora = new Date();
+            const dow = (ahora.getDay() + 6) % 7;
+            const lunes = new Date(ahora);
+            lunes.setDate(ahora.getDate() - dow + 7); // next week's monday
+            const dias = Array.from({length:5}, (_, i) => {
+              const d = new Date(lunes);
+              d.setDate(lunes.getDate() + i);
+              return dateKey(d.getFullYear(), d.getMonth(), d.getDate());
+            });
+            const minDisponibles = Math.min(...dias.map(k => MAX_DIA - (bookings[k] || 0)));
+            return <strong style={{ color: minDisponibles <= 2 ? "#f59e0b" : "#4ade80", marginLeft:6 }}>{minDisponibles} de {MAX_DIA}</strong>;
+          })()}
+        </div>
+      )}
       {errors.plan && <p style={{ ...S.err, marginBottom:8 }}>{errors.plan}</p>}
       <button style={S.btnPrimary} onClick={irACalendario}>Elegir fecha</button>
       <button style={S.btnGhost} onClick={() => setScreen(usuarioActual ? "misDias" : "registro")}>← Volver</button>
@@ -947,12 +983,32 @@ export default function App() {
                       </div>
                       <div style={{ textAlign:"right" }}>
                         <p style={{ fontSize:20, fontWeight:700, color:"#4ade80", margin:0 }}>${precio}</p>
-                        <p style={{ fontSize:10, color:"#64748b", margin:0 }}>semanal</p>
+                        <p style={{ fontSize:10, color:"#64748b", margin:"0 0 6px" }}>semanal</p>
+                        <button style={{
+                          background: (adminData.pagados?.[semKey+"-"+u.celular]) ? "#14532d" : "#1e293b",
+                          border: (adminData.pagados?.[semKey+"-"+u.celular]) ? "1px solid #4ade80" : "1px solid #334155",
+                          color: (adminData.pagados?.[semKey+"-"+u.celular]) ? "#4ade80" : "#64748b",
+                          borderRadius:8, padding:"4px 10px", fontSize:11, cursor:"pointer", fontWeight:600
+                        }} onClick={() => {
+                          const pagoKey = semKey+"-"+u.celular;
+                          setAdminData(prev => ({
+                            ...prev,
+                            pagados: { ...(prev.pagados||{}), [pagoKey]: !(prev.pagados?.[pagoKey]) }
+                          }));
+                        }}>
+                          {(adminData.pagados?.[semKey+"-"+u.celular]) ? "✓ Pagado" : "Marcar pagado"}
+                        </button>
                       </div>
                     </div>
                   </div>
                 );
               })}
+              <div style={{ borderTop:"1px solid #334155", marginTop:10, paddingTop:10, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <p style={{ fontSize:12, color:"#64748b", margin:0 }}>Total a cobrar esta semana</p>
+                <p style={{ fontSize:18, fontWeight:700, color:"#f59e0b", margin:0 }}>
+                  ${Object.values(porUsuario).reduce((acc, u) => acc + getPrecio(u.celular, semKey), 0)}
+                </p>
+              </div>
             </div>
           );
         })}
