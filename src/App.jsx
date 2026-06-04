@@ -431,20 +431,34 @@ export default function App() {
       <p style={S.title}>Elige tu plan</p>
       {perroActivo && <div style={{ ...S.infoBox, borderColor:"#f59e0b", color:"#f59e0b", marginBottom:16 }}>🐾 Reservando para: <strong>{perroActivo.nombre}</strong></div>}
       <p style={S.sub}>¿Cómo prefieres contratar el servicio?</p>
-      <div style={S.planGrid}>
-        <div style={S.planCard(plan === "semanal")} onClick={() => { setPlan("semanal"); setErrors({}); }}>
-          <div style={S.planEmoji}>📦</div>
-          <div style={S.planName}>Paquete semanal</div>
-          <div style={S.planPrice}>$500</div>
-          <div style={S.planSub}>$100/día · 5 días seguidos</div>
-        </div>
-        <div style={S.planCard(plan === "individual")} onClick={() => { setPlan("individual"); setErrors({}); }}>
-          <div style={S.planEmoji}>🎟️</div>
-          <div style={S.planName}>Paseo individual</div>
-          <div style={S.planPrice}>$150</div>
-          <div style={S.planSub}>por día · días libres</div>
-        </div>
-      </div>
+      {(() => {
+        // Count how many other dogs have a semanal package
+        // We'll calculate the discount at calendar time when we know the week
+        // For now show base price, discount shown after week selection
+        return (
+          <>
+            <div style={S.planGrid}>
+              <div style={S.planCard(plan === "semanal")} onClick={() => { setPlan("semanal"); setErrors({}); }}>
+                <div style={S.planEmoji}>📦</div>
+                <div style={S.planName}>Paquete semanal</div>
+                <div style={S.planPrice}>$500</div>
+                <div style={S.planSub}>$100/día · 5 días seguidos</div>
+              </div>
+              <div style={S.planCard(plan === "individual")} onClick={() => { setPlan("individual"); setErrors({}); }}>
+                <div style={S.planEmoji}>🎟️</div>
+                <div style={S.planName}>Paseo individual</div>
+                <div style={S.planPrice}>$150</div>
+                <div style={S.planSub}>por día · días libres</div>
+              </div>
+            </div>
+            {(usuarioActual?.perros?.length || 0) > 1 && plan === "semanal" && (
+              <div style={{ ...S.infoBox, borderColor:"#92400e", color:"#fde68a", marginBottom:14 }}>
+                💡 Si eliges la misma semana que otro de tus perros, aplica descuento por volumen
+              </div>
+            )}
+          </>
+        );
+      })()}
       <div style={{ background:"#0f172a", border:"2px solid #334155", borderRadius:12, padding:"14px 16px", marginBottom:14, display:"flex", alignItems:"center", gap:12 }}>
         <span style={{ fontSize:28 }}>🕖</span>
         <div>
@@ -465,7 +479,23 @@ export default function App() {
       <p style={S.sub}>{plan === "semanal" ? "Selecciona cualquier día hábil y se marcará esa semana completa" : ""}</p>
       <div style={S.infoBox}>
         {plan === "semanal"
-          ? diasSel.length === 5 ? <><strong style={{ color:"#4ade80" }}>¡Listo!</strong> Semana seleccionada</> : "Selecciona cualquier día de la semana que quieras"
+          ? diasSel.length === 5
+            ? (() => {
+                // Check how many other dogs share this week
+                const otrosPerros = (usuarioActual?.perros || []).filter((p, i) => i !== perroActivo?.idx && p.dias && diasSel.some(d => p.dias.includes(d)));
+                const totalConDescuento = otrosPerros.length + 1;
+                const precios = [500,800,1200,1600];
+                const precio = precios[Math.min(totalConDescuento,4)-1];
+                return (
+                  <>
+                    <strong style={{ color:"#4ade80" }}>¡Listo!</strong> Semana seleccionada
+                    {totalConDescuento > 1
+                      ? <span style={{ color:"#f59e0b", fontWeight:700 }}> · ${precio} con descuento por {totalConDescuento} perros 🎉</span>
+                      : <span style={{ color:"#94a3b8" }}> · $500</span>}
+                  </>
+                );
+              })()
+            : "Selecciona cualquier día de la semana que quieras"
           : diasSel.length === 0 ? "Selecciona los días que quieras reservar"
           : <><strong style={{ color:"#f8fafc" }}>{diasSel.length} día{diasSel.length>1?"s":""}</strong> seleccionado{diasSel.length>1?"s":""}</>}
       </div>
@@ -497,12 +527,9 @@ export default function App() {
         setDiasSel([]); setSemanaAviso(null);
         setScreen("misDias");
       }}>Ver mis reservaciones</button>
-      <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:12, padding:"12px 14px", marginTop:4, textAlign:"center" }}>
-        <p style={{ fontSize:12, color:"#64748b", margin:"0 0 4px" }}>¿Necesitas cancelar?</p>
-        <p style={{ fontSize:13, color:"#ef4444", fontWeight:700, margin:0, letterSpacing:0.5 }}>
-          ENTRA A "¿YA ESTÁS REGISTRADO?" → CANCELAR
-        </p>
-      </div>
+      <p style={{ fontSize:13, color:"#64748b", textAlign:"center", marginTop:8 }}>
+        Para cancelar, entra a <strong style={{ color:"#94a3b8" }}>¿Ya estás registrado?</strong> y toca Cancelar reservación.
+      </p>
     </div></div>
   );
 
@@ -541,6 +568,36 @@ export default function App() {
                 <p style={S.perroNombre}>{perro.nombre}</p>
                 {perro.raza && <p style={S.perroRaza}>{perro.raza}</p>}
               </div>
+              <button style={{ background:"none", border:"none", color:"#475569", fontSize:12, cursor:"pointer", padding:"2px 6px" }}
+                onClick={async () => {
+                  if (!window.confirm(`¿Seguro que quieres eliminar a ${perro.nombre}?`)) return;
+                  const u = usuarioActual || {};
+                  const perrosActualizados = (u.perros || []).filter((_, i) => i !== idx);
+                  // Free up bookings for this dog's days
+                  const newBookings = { ...bookings };
+                  for (const k of (perro.dias || [])) {
+                    const bookingRef = doc(db, "bookings", k);
+                    const snapB = await getDoc(bookingRef);
+                    if (snapB.exists()) {
+                      const nuevoCount = Math.max(0, (snapB.data().count || 0) - 1);
+                      if (nuevoCount === 0) {
+                        await deleteDoc(bookingRef);
+                        delete newBookings[k];
+                      } else {
+                        let removido = false;
+                        const reservasFiltradas = (snapB.data().reservas || []).filter(r => {
+                          if (!removido && r.perro === perro.nombre) { removido = true; return false; }
+                          return true;
+                        });
+                        await setDoc(bookingRef, { count: nuevoCount, reservas: reservasFiltradas });
+                        newBookings[k] = nuevoCount;
+                      }
+                    }
+                  }
+                  await updateDoc(doc(db, "usuarios", u.celular), { perros: perrosActualizados });
+                  setBookings(newBookings);
+                  setUsuarioActual({ ...u, perros: perrosActualizados });
+                }}>🗑️ Borrar</button>
             </div>
             <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:10 }}>
               <button style={S.btnSmallAmber} onClick={() => {
