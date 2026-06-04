@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import emailjs from "@emailjs/browser";
 import { initializeApp } from "firebase/app";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs } from "firebase/firestore";
 
@@ -287,18 +286,17 @@ export default function App() {
         const celularNotif = usuarioActual?.celular || form.celular;
         const nombreNotif = usuarioActual?.nombre || form.nombre;
         const perroNotif = perroActivo ? (perrosFresh[perroActivo.idx]?.nombre || "") : "";
-        await fetch("https://formsubmit.co/brunodpyp@gmail.com", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Accept": "application/json" },
-          body: JSON.stringify({
-            _subject: "Nueva reservación - Paseador de perros",
-            Nombre: nombreNotif,
-            Celular: celularNotif,
-            Perro: perroNotif,
-            Dias: diasSel.join(", "),
-            Plan: plan,
-          })
-        });
+        await window.emailjs.send(
+          "service_6z5b698",
+          "template_nxyz3ws",
+          {
+            nombre: nombreNotif,
+            celular: "+52" + celularNotif,
+            perro: perroNotif,
+            dias: diasSel.map(k => { const [a,m,d] = k.split("-"); return new Date(+a,+m-1,+d).toLocaleDateString("es-MX",{weekday:"long",day:"numeric",month:"long"}); }).join(", "),
+          },
+          "EVJbWgECjQ123eT3U"
+        );
       } catch(e) { console.log("Email notification failed", e); }
 
       const siguienteIdx = perrosFresh.findIndex((p, i) => i > (perroActivo?.idx ?? -1) && (!p.dias || p.dias.length === 0));
