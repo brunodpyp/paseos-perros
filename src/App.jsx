@@ -137,6 +137,10 @@ export default function App() {
   const [usuarioActual, setUsuarioActual] = useState(null);
   // Agregar perro nuevo
   const [nuevosPerros, setNuevosPerros] = useState([{nombre:"", raza:"", notas:""}]);
+  const [adminPass, setAdminPass] = useState("");
+  const [adminData, setAdminData] = useState(null);
+  const [adminErr, setAdminErr] = useState(false);
+  const ADMIN_PASS = "brunod01142008";
   const [cancelarPerroIdx, setCancelarPerroIdx] = useState(null);
   const [diasACancelar, setDiasACancelar] = useState([]);
 
@@ -343,7 +347,13 @@ export default function App() {
 
   if (screen === "inicio") return (
     <div style={S.root}><div style={S.wrap}>
-      <p style={{ fontSize:32, fontWeight:700, color:"#f8fafc", margin:"0 0 4px" }}>🐾 Paseador de perros</p>
+      <p style={{ fontSize:32, fontWeight:700, color:"#f8fafc", margin:"0 0 4px" }} onClick={() => {
+        const now = Date.now();
+        if (!window._adminTaps) window._adminTaps = [];
+        window._adminTaps = window._adminTaps.filter(t => now - t < 3000);
+        window._adminTaps.push(now);
+        if (window._adminTaps.length >= 5) { window._adminTaps = []; setScreen("adminLogin"); }
+      }}>🐾 Paseador de perros</p>
       <p style={{ fontSize:14, color:"#94a3b8", margin:"0 0 28px" }}>Tu perro merece salir. Nosotros lo llevamos.</p>
       <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:32 }}>
         {[
@@ -822,6 +832,148 @@ export default function App() {
           {cargando ? "Cancelando..." : "Confirmar cancelación"}
         </button>
         <button style={S.btnGhost} onClick={() => setScreen("misDias")}>← Volver</button>
+      </div></div>
+    );
+  }
+
+  if (screen === "adminLogin") return (
+    <div style={S.root}><div style={S.wrap}>
+      <p style={S.title}>Acceso administrativo</p>
+      <p style={S.sub}>Ingresa la contraseña para continuar</p>
+      <div style={S.field}>
+        <label style={S.label}>Contraseña</label>
+        <input style={S.input} type="password" placeholder="••••••••" value={adminPass}
+          onChange={e => { setAdminPass(e.target.value); setAdminErr(false); }} />
+        {adminErr && <p style={S.err}>Contraseña incorrecta</p>}
+      </div>
+      <button style={S.btnPrimary} onClick={async () => {
+        if (adminPass !== ADMIN_PASS) { setAdminErr(true); return; }
+        setCargando(true);
+        // Load all users
+        const snap = await getDocs(collection(db, "usuarios"));
+        const users = [];
+        snap.forEach(d => users.push(d.data()));
+        // Load all bookings
+        const snapB = await getDocs(collection(db, "bookings"));
+        const bData = {};
+        snapB.forEach(d => { bData[d.id] = d.data(); });
+        setAdminData({ users, bookings: bData });
+        setCargando(false);
+        setAdminPass("");
+        setScreen("admin");
+      }}>Entrar</button>
+      <button style={S.btnGhost} onClick={() => { setAdminPass(""); setAdminErr(false); setScreen("inicio"); }}>← Volver</button>
+    </div></div>
+  );
+
+  if (screen === "admin") {
+    const { users = [], bookings: bk = {} } = adminData || {};
+
+    // Group by week
+    const semanas = {};
+    users.forEach(u => {
+      (u.perros || []).forEach(perro => {
+        (perro.dias || []).forEach(dia => {
+          const d = keyToDate(dia);
+          const dow = d.getDay();
+          const diff = (dow + 6) % 7;
+          const lunes = new Date(d);
+          lunes.setDate(d.getDate() - diff);
+          const semKey = dateKey(lunes.getFullYear(), lunes.getMonth(), lunes.getDate());
+          if (!semanas[semKey]) semanas[semKey] = [];
+          // Check if already added this user+dog combo for this week
+          const exists = semanas[semKey].find(e => e.celular === u.celular && e.perro === perro.nombre);
+          if (!exists) {
+            semanas[semKey].push({ nombre: u.nombre, celular: u.celular, perro: perro.nombre, raza: perro.raza || "" });
+          }
+        });
+      });
+    });
+
+    const semanasOrdenadas = Object.keys(semanas).sort();
+
+    // Calculate price per user per week
+    const getPrecio = (celular, semKey) => {
+      const user = users.find(u => u.celular === celular);
+      if (!user) return 500;
+      const perrosEnSemana = (user.perros || []).filter(p =>
+        (p.dias || []).some(d => {
+          const dt = keyToDate(d);
+          const dow = dt.getDay();
+          const diff = (dow + 6) % 7;
+          const lunes = new Date(dt);
+          lunes.setDate(dt.getDate() - diff);
+          return dateKey(lunes.getFullYear(), lunes.getMonth(), lunes.getDate()) === semKey;
+        })
+      ).length;
+      return [500,800,1200,1600][Math.min(perrosEnSemana,4)-1];
+    };
+
+    return (
+      <div style={S.root}><div style={S.wrap}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+          <p style={S.title}>Panel Admin</p>
+          <button style={S.btnSmall} onClick={() => setScreen("inicio")}>Salir</button>
+        </div>
+
+        {semanasOrdenadas.length === 0 && <p style={{ color:"#64748b" }}>Sin reservaciones aún</p>}
+
+        {semanasOrdenadas.map(semKey => {
+          const [a,m,d] = semKey.split("-");
+          const lunes = new Date(+a, +m-1, +d);
+          const viernes = new Date(lunes); viernes.setDate(lunes.getDate() + 4);
+          const labelSem = `${lunes.getDate()} – ${viernes.getDate()} ${MESES[viernes.getMonth()]} ${viernes.getFullYear()}`;
+          const entradas = semanas[semKey];
+
+          // Group by user
+          const porUsuario = {};
+          entradas.forEach(e => {
+            if (!porUsuario[e.celular]) porUsuario[e.celular] = { nombre: e.nombre, celular: e.celular, perros: [] };
+            porUsuario[e.celular].perros.push(e.perro + (e.raza ? ` (${e.raza})` : ""));
+          });
+
+          return (
+            <div key={semKey} style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:14, padding:"14px", marginBottom:14 }}>
+              <p style={{ fontSize:13, fontWeight:700, color:"#f59e0b", margin:"0 0 12px" }}>📅 Semana {labelSem}</p>
+              {Object.values(porUsuario).map((u, i) => {
+                const precio = getPrecio(u.celular, semKey);
+                return (
+                  <div key={i} style={{ borderTop: i > 0 ? "1px solid #334155" : "none", paddingTop: i > 0 ? 10 : 0, marginTop: i > 0 ? 10 : 0 }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+                      <div>
+                        <p style={{ fontSize:15, fontWeight:700, color:"#f8fafc", margin:"0 0 2px" }}>{u.nombre}</p>
+                        <p style={{ fontSize:12, color:"#64748b", margin:"0 0 4px" }}>📱 {u.celular}</p>
+                        <p style={{ fontSize:12, color:"#94a3b8", margin:0 }}>🐾 {u.perros.join(", ")}</p>
+                      </div>
+                      <div style={{ textAlign:"right" }}>
+                        <p style={{ fontSize:20, fontWeight:700, color:"#4ade80", margin:0 }}>${precio}</p>
+                        <p style={{ fontSize:10, color:"#64748b", margin:0 }}>semanal</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+
+        <hr style={S.divider} />
+        <p style={S.secLabel}>Todos los clientes ({users.length})</p>
+        {users.map((u, i) => (
+          <div key={i} style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:12, padding:"12px 14px", marginBottom:8 }}>
+            <div style={{ display:"flex", justifyContent:"space-between" }}>
+              <div>
+                <p style={{ fontSize:14, fontWeight:700, color:"#f8fafc", margin:"0 0 2px" }}>{u.nombre}</p>
+                <p style={{ fontSize:12, color:"#64748b", margin:"0 0 4px" }}>📱 {u.celular}</p>
+                {(u.perros || []).map((p, j) => (
+                  <p key={j} style={{ fontSize:12, color:"#94a3b8", margin:"2px 0 0" }}>
+                    🐾 {p.nombre}{p.raza ? ` · ${p.raza}` : ""} — {(p.dias || []).length} día{(p.dias||[]).length!==1?"s":""}
+                  </p>
+                ))}
+              </div>
+            </div>
+          </div>
+        ))}
       </div></div>
     );
   }
