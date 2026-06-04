@@ -517,6 +517,15 @@ export default function App() {
           })()}
         </div>
       )}
+      <a href="https://wa.me/528129816903?text=Hola,%20mi%20perro%20es%20ansioso%20y%20quisiera%20apartar%20un%20horario%20exclusivo"
+        target="_blank" rel="noopener noreferrer"
+        style={{ display:"flex", alignItems:"flex-start", gap:10, background:"#1e293b", border:"1px solid #334155", borderRadius:12, padding:"12px 14px", marginBottom:14, textDecoration:"none" }}>
+        <span style={{ fontSize:20, flexShrink:0 }}>🐕</span>
+        <div>
+          <p style={{ fontSize:13, fontWeight:700, color:"#f8fafc", margin:"0 0 2px" }}>¿Tu perro es ansioso o reactivo?</p>
+          <p style={{ fontSize:12, color:"#94a3b8", margin:0 }}>Para una mejor experiencia, escríbenos por WhatsApp y apartamos un horario exclusivo para él.</p>
+        </div>
+      </a>
       {errors.plan && <p style={{ ...S.err, marginBottom:8 }}>{errors.plan}</p>}
       <button style={S.btnPrimary} onClick={irACalendario}>Elegir fecha</button>
       <button style={S.btnGhost} onClick={() => setScreen(usuarioActual ? "misDias" : "registro")}>← Volver</button>
