@@ -51,19 +51,19 @@ function formatFecha(key) {
 }
 
 const S = {
-  root: { minHeight:"100vh", background:"#0f172a", fontFamily:"sans-serif", color:"#e2e8f0", paddingBottom:40 },
-  wrap: { maxWidth:420, margin:"0 auto", padding:"24px 16px" },
+  root: { minHeight:"100vh", background:"#0f172a", fontFamily:"sans-serif", color:"#e2e8f0", paddingBottom:60, WebkitTapHighlightColor:"transparent" },
+  wrap: { maxWidth:480, margin:"0 auto", padding:"20px 16px" },
   title: { fontSize:26, fontWeight:700, color:"#f8fafc", margin:"0 0 6px" },
   sub: { fontSize:14, color:"#94a3b8", margin:"0 0 24px", lineHeight:1.6 },
   label: { display:"block", fontSize:12, color:"#94a3b8", marginBottom:6, textTransform:"uppercase", letterSpacing:0.8 },
   field: { marginBottom:16 },
-  input: { width:"100%", background:"#1e293b", border:"1px solid #334155", borderRadius:10, padding:"11px 14px", color:"#f8fafc", fontSize:15, outline:"none", boxSizing:"border-box" },
+  input: { width:"100%", background:"#1e293b", border:"1px solid #334155", borderRadius:10, padding:"12px 14px", color:"#f8fafc", fontSize:16, outline:"none", boxSizing:"border-box" },
   textarea: { width:"100%", background:"#1e293b", border:"1px solid #334155", borderRadius:10, padding:"11px 14px", color:"#f8fafc", fontSize:14, outline:"none", boxSizing:"border-box", minHeight:72, resize:"none" },
   phoneRow: { display:"flex" },
   phonePrefix: { background:"#0f172a", border:"1px solid #334155", borderRight:"none", borderRadius:"10px 0 0 10px", padding:"0 12px", display:"flex", alignItems:"center", fontSize:14, color:"#94a3b8", whiteSpace:"nowrap" },
-  phoneInput: { flex:1, background:"#1e293b", border:"1px solid #334155", borderRadius:"0 10px 10px 0", padding:"11px 14px", color:"#f8fafc", fontSize:15, outline:"none", width:"100%" },
-  btnPrimary: { width:"100%", background:"#f59e0b", color:"#0f172a", border:"none", borderRadius:12, padding:"13px", fontWeight:700, fontSize:15, cursor:"pointer", marginBottom:8 },
-  btnGhost: { width:"100%", background:"none", color:"#94a3b8", border:"1px solid #334155", borderRadius:12, padding:"12px", fontWeight:500, fontSize:14, cursor:"pointer", marginBottom:8 },
+  phoneInput: { flex:1, background:"#1e293b", border:"1px solid #334155", borderRadius:"0 10px 10px 0", padding:"12px 14px", color:"#f8fafc", fontSize:16, outline:"none", width:"100%" },
+  btnPrimary: { width:"100%", background:"#f59e0b", color:"#0f172a", border:"none", borderRadius:12, padding:"15px", fontWeight:700, fontSize:16, cursor:"pointer", marginBottom:8, touchAction:"manipulation" },
+  btnGhost: { width:"100%", background:"none", color:"#94a3b8", border:"1px solid #334155", borderRadius:12, padding:"14px", fontWeight:500, fontSize:14, cursor:"pointer", marginBottom:8, touchAction:"manipulation" },
   btnSmall: { background:"#1e293b", border:"1px solid #334155", borderRadius:8, padding:"6px 12px", fontSize:12, color:"#94a3b8", cursor:"pointer", fontWeight:500 },
   btnSmallAmber: { background:"#292524", border:"1px solid #f59e0b", borderRadius:8, padding:"6px 12px", fontSize:12, color:"#f59e0b", cursor:"pointer", fontWeight:500 },
   err: { fontSize:12, color:"#ef4444", marginTop:4 },
@@ -108,7 +108,7 @@ function CalDay({ day, keyStr, count, status, onToggle, calYear, calMonth }) {
   if (isToday && status !== "selected") color = "#fff";
   return (
     <div onClick={() => (status === "available" || status === "selected" || status === "almost") ? onToggle(keyStr) : null}
-      style={{ borderRadius:7, padding:"5px 2px", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:44, fontSize:13, border, background:bg, color, cursor }}>
+      style={{ borderRadius:7, padding:"4px 2px", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:48, fontSize:13, border, background:bg, color, cursor, touchAction:"manipulation" }}>
       <span style={{ fontWeight: isToday ? 700 : 500 }}>{day}</span>
       {status !== "weekend" && <span style={{ fontSize:9, marginTop:2, opacity:0.85 }}>{count >= MAX_DIA ? "lleno" : `${count}/${MAX_DIA}`}</span>}
     </div>
@@ -281,6 +281,25 @@ export default function App() {
       const perrosFresh = snapFresh.exists() ? snapFresh.data().perros || [] : perrosActuales;
       if (snapFresh.exists()) setUsuarioActual({ celular, ...snapFresh.data() });
 
+      // Always send email notification
+      try {
+        const celularNotif = usuarioActual?.celular || form.celular;
+        const nombreNotif = usuarioActual?.nombre || form.nombre;
+        const perroNotif = perroActivo ? (perrosFresh[perroActivo.idx]?.nombre || "") : "";
+        await fetch("https://formsubmit.co/brunodpyp@gmail.com", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Accept": "application/json" },
+          body: JSON.stringify({
+            _subject: "Nueva reservación - Paseador de perros",
+            Nombre: nombreNotif,
+            Celular: celularNotif,
+            Perro: perroNotif,
+            Dias: diasSel.join(", "),
+            Plan: plan,
+          })
+        });
+      } catch(e) { console.log("Email notification failed", e); }
+
       const siguienteIdx = perrosFresh.findIndex((p, i) => i > (perroActivo?.idx ?? -1) && (!p.dias || p.dias.length === 0));
       if (siguienteIdx !== -1) {
         // Go directly to plan for next dog
@@ -289,24 +308,6 @@ export default function App() {
         setPlan(null); setDiasSel([]); setSemanaAviso(null);
         setScreen("plan");
       } else {
-        // Send email notification
-        try {
-          const celularNotif = usuarioActual?.celular || form.celular;
-          const nombreNotif = usuarioActual?.nombre || form.nombre;
-          const perroNotif = perroActivo ? (usuarioActual?.perros?.[perroActivo.idx]?.nombre || form.perros?.[perroActivo.idx]?.nombre || "") : "";
-          await fetch(`https://formsubmit.co/brunodpyp@gmail.com`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "Accept": "application/json" },
-            body: JSON.stringify({
-              _subject: "Nueva reservación - Paseador de perros",
-              Nombre: nombreNotif,
-              Celular: celularNotif,
-              Perro: perroNotif,
-              Dias: diasSel.join(", "),
-              Plan: plan,
-            })
-          });
-        } catch(e) { console.log("Email notification failed", e); }
         setScreen("gracias");
       }
     } catch (e) { setErrors({ dias:"Ocurrió un error, intenta de nuevo." }); }
@@ -392,6 +393,11 @@ export default function App() {
       </div>
       <button style={S.btnPrimary} onClick={() => setScreen("registro")}>Reservar mi paseo</button>
       <button style={S.btnGhost} onClick={() => { setLoginCel(""); setLoginErr(false); setScreen("registrado"); }}>¿Ya estás registrado?</button>
+      <a href="https://wa.me/528129816903?text=Hola,%20tengo%20una%20pregunta%20sobre%20el%20servicio%20de%20paseador%20de%20perros"
+        target="_blank" rel="noopener noreferrer"
+        style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:8, width:"100%", background:"#14532d", border:"1px solid #16a34a", borderRadius:12, padding:"12px", fontWeight:600, fontSize:14, color:"#4ade80", textDecoration:"none", marginBottom:8, boxSizing:"border-box" }}>
+        💬 ¿Dudas? Escríbeme por WhatsApp
+      </a>
     </div></div>
   );
 
@@ -893,7 +899,10 @@ export default function App() {
         const snapB = await getDocs(collection(db, "bookings"));
         const bData = {};
         snapB.forEach(d => { bData[d.id] = d.data(); });
-        setAdminData({ users, bookings: bData });
+        // Load pagados
+        const snapPag = await getDoc(doc(db, "admin", "pagados"));
+        const pagados = snapPag.exists() ? snapPag.data() : {};
+        setAdminData({ users, bookings: bData, pagados });
         setCargando(false);
         setAdminPass("");
         setScreen("admin");
@@ -989,11 +998,16 @@ export default function App() {
                           border: (adminData.pagados?.[semKey+"-"+u.celular]) ? "1px solid #4ade80" : "1px solid #334155",
                           color: (adminData.pagados?.[semKey+"-"+u.celular]) ? "#4ade80" : "#64748b",
                           borderRadius:8, padding:"4px 10px", fontSize:11, cursor:"pointer", fontWeight:600
-                        }} onClick={() => {
+                        }} onClick={async () => {
                           const pagoKey = semKey+"-"+u.celular;
+                          const nuevoEstado = !(adminData.pagados?.[pagoKey]);
+                          const pagadosRef = doc(db, "admin", "pagados");
+                          const snapPag = await getDoc(pagadosRef);
+                          const pagadosActuales = snapPag.exists() ? snapPag.data() : {};
+                          await setDoc(pagadosRef, { ...pagadosActuales, [pagoKey]: nuevoEstado });
                           setAdminData(prev => ({
                             ...prev,
-                            pagados: { ...(prev.pagados||{}), [pagoKey]: !(prev.pagados?.[pagoKey]) }
+                            pagados: { ...(prev.pagados||{}), [pagoKey]: nuevoEstado }
                           }));
                         }}>
                           {(adminData.pagados?.[semKey+"-"+u.celular]) ? "✓ Pagado" : "Marcar pagado"}
