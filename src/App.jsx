@@ -14,7 +14,7 @@ const firebaseConfig = {
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getFirestore(firebaseApp);
 
-const MAX_DIA = 5;
+const MAX_DIA = 3;
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 const hoy = new Date();
 
@@ -116,7 +116,11 @@ function CalDay({ day, keyStr, count, status, onToggle, calYear, calMonth }) {
 }
 
 export default function App() {
-  const [screen, setScreen] = useState("inicio");
+  const [screen, setScreenState] = useState("inicio");
+  const setScreen = (newScreen) => {
+    setScreenState(newScreen);
+    window.history.pushState({ screen: newScreen }, "", "");
+  };
   // Registro
   const [form, setForm] = useState({ nombre:"", celular:"", notas:"", numPerros:1, perros:[{nombre:"", raza:""}] });
   const [errors, setErrors] = useState({});
@@ -143,6 +147,19 @@ export default function App() {
   const ADMIN_PASS = "brunod01142008";
   const [cancelarPerroIdx, setCancelarPerroIdx] = useState(null);
   const [diasACancelar, setDiasACancelar] = useState([]);
+
+  useEffect(() => {
+    const handlePopState = (e) => {
+      if (e.state?.screen) {
+        setScreenState(e.state.screen);
+      } else {
+        setScreenState("inicio");
+      }
+    };
+    window.addEventListener("popstate", handlePopState);
+    window.history.replaceState({ screen: "inicio" }, "", "");
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   useEffect(() => {
     const cargarBookings = async () => {
@@ -344,7 +361,7 @@ export default function App() {
             const count = getCount(key);
             const full = count >= MAX_DIA;
             // full is simply when all 5 spots are taken
-            const almost = count >= 3 && !full;
+            const almost = count >= 2 && !full;
             const selected = diasSel.includes(key);
             let status = "available";
             if (isWeekend || isToday || isPast || isBloqueado) status = "weekend";
@@ -422,7 +439,7 @@ export default function App() {
       <div style={S.field}>
         <label style={S.label}>¿Cuántos perros?</label>
         <div style={S.perrosBtns}>
-          {[1,2,3,4].map(n => (
+          {[1,2,3].map(n => (
             <button key={n} style={S.perroBtn(form.numPerros === n)}
               onClick={() => setForm(f => ({ ...f, numPerros:n, perros: Array.from({length:n}, (_,i) => f.perros[i] || {nombre:"",raza:""}) }))}>
               <div style={{ fontSize:15 }}>{n}</div>
@@ -444,14 +461,14 @@ export default function App() {
             <input style={{ ...S.input, marginBottom:0 }} placeholder="Ej. Labrador" value={form.perros[i]?.raza || ""}
               onChange={e => setForm(f => { const p=[...f.perros]; p[i]={...p[i], raza:e.target.value}; return {...f, perros:p}; })} />
           </div>
+          <div style={{ marginTop:10 }}>
+            <label style={S.label}>Notas (opcional)</label>
+            <input style={{ ...S.input, marginBottom:0 }} placeholder="Ej. Perro ansioso, lleva snack" value={form.perros[i]?.notas || ""}
+              onChange={e => setForm(f => { const p=[...f.perros]; p[i]={...p[i], notas:e.target.value}; return {...f, perros:p}; })} />
+          </div>
         </div>
       ))}
       {errors.perros && <p style={{ ...S.err, marginBottom:8 }}>{errors.perros}</p>}
-      <div style={S.field}>
-        <label style={S.label}>Notas generales (opcional)</label>
-        <textarea style={S.textarea} placeholder="Ej. Perro ansioso, lleva snack" value={form.notas}
-          onChange={e => setForm(f => ({ ...f, notas: e.target.value }))} />
-      </div>
       <button style={{ ...S.btnPrimary, opacity: cargando ? 0.6 : 1 }} onClick={irAPlan} disabled={cargando}>
         {cargando ? "Verificando..." : "Continuar"}
       </button>
@@ -683,7 +700,7 @@ export default function App() {
           </div>
         ))}
         <hr style={S.divider} />
-        {perros.length < 4 && (
+        {perros.length < 3 && (
           <button style={{ ...S.btnGhost, borderColor:"#f59e0b", color:"#f59e0b" }} onClick={() => {
             setNuevosPerros([{nombre:"", raza:"", notas:""}]);
             setScreen("agregarPerro");
@@ -697,7 +714,7 @@ export default function App() {
   if (screen === "agregarPerro") {
     const u = usuarioActual || {};
     const numActual = (u.perros || []).length;
-    const maxPuedoAgregar = Math.max(1, 4 - numActual);
+    const maxPuedoAgregar = Math.max(1, 3 - numActual);
     return (
       <div style={S.root}><div style={S.wrap}>
         <p style={S.title}>Agregar perros</p>
