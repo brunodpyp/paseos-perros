@@ -142,6 +142,9 @@ export default function App() {
   // Agregar perro nuevo
   const [nuevosPerros, setNuevosPerros] = useState([{nombre:"", raza:"", notas:""}]);
   const [adminPass, setAdminPass] = useState("");
+  const [diasBloqueadosAdmin, setDiasBloqueadosAdmin] = useState([]);
+  const [adminCalMes, setAdminCalMes] = useState(hoy.getMonth());
+  const [adminCalAnio, setAdminCalAnio] = useState(hoy.getFullYear());
   const [adminData, setAdminData] = useState(null);
   const [adminErr, setAdminErr] = useState(false);
   const ADMIN_PASS = "brunod01142008";
@@ -162,13 +165,16 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const cargarBookings = async () => {
+    const cargarDatos = async () => {
       const snap = await getDocs(collection(db, "bookings"));
       const data = {};
       snap.forEach(d => { data[d.id] = d.data().count || 0; });
       setBookings(data);
+      // Load blocked days
+      const snapBloq = await getDoc(doc(db, "admin", "bloqueados"));
+      if (snapBloq.exists()) setDiasBloqueadosAdmin(snapBloq.data().dias || []);
     };
-    cargarBookings();
+    cargarDatos();
   }, []);
 
   const getCount = (key) => bookings[key] || 0;
@@ -357,7 +363,7 @@ export default function App() {
             const isWeekend = dow === 0 || dow === 6;
             const isToday = calAnio === hoy.getFullYear() && calMes === hoy.getMonth() && day === hoy.getDate();
             const ahora2 = new Date(); const isPast = new Date(calAnio, calMes, day) < new Date(ahora2.getFullYear(), ahora2.getMonth(), ahora2.getDate());
-            const isBloqueado = diasBloqueados.includes(key);
+            const isBloqueado = diasBloqueados.includes(key) || diasBloqueadosAdmin.includes(key);
             const count = getCount(key);
             const full = count >= MAX_DIA;
             // full is simply when all 5 spots are taken
@@ -927,6 +933,10 @@ export default function App() {
         // Load pagados
         const snapPag = await getDoc(doc(db, "admin", "pagados"));
         const pagados = snapPag.exists() ? snapPag.data() : {};
+        // Load dias bloqueados
+        const snapBloq = await getDoc(doc(db, "admin", "bloqueados"));
+        const bloqueados = snapBloq.exists() ? (snapBloq.data().dias || []) : [];
+        setDiasBloqueadosAdmin(bloqueados);
         setAdminData({ users, bookings: bData, pagados });
         setCargando(false);
         setAdminPass("");
@@ -1051,6 +1061,43 @@ export default function App() {
             </div>
           );
         })}
+
+        <hr style={S.divider} />
+        <p style={S.secLabel}>Bloquear días</p>
+        <p style={{ fontSize:12, color:"#64748b", marginBottom:10 }}>Selecciona días que no puedes trabajar para que nadie los pueda reservar</p>
+        <div style={S.calHeader}>
+          <button style={S.calNav} onClick={() => { setAdminCalMes(m => { if(m===0){setAdminCalAnio(a=>a-1);return 11;} return m-1; }); }}>‹</button>
+          <span style={S.calTitle}>{MESES[adminCalMes]} {adminCalAnio}</span>
+          <button style={S.calNav} onClick={() => { setAdminCalMes(m => { if(m===11){setAdminCalAnio(a=>a+1);return 0;} return m+1; }); }}>›</button>
+        </div>
+        <div style={S.calGrid}>
+          {["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"].map(d => <div key={d} style={S.calDayLabel}>{d}</div>)}
+          {(() => {
+            const { offset, total } = getMonthDays(adminCalAnio, adminCalMes);
+            const cells = [...Array(offset).fill(null), ...Array.from({length:total},(_,i)=>i+1)];
+            return cells.map((day, i) => {
+              if (!day) return <div key={i} />;
+              const key = dateKey(adminCalAnio, adminCalMes, day);
+              const dow = new Date(adminCalAnio, adminCalMes, day).getDay();
+              const isWeekend = dow === 0 || dow === 6;
+              const isBlocked = diasBloqueadosAdmin.includes(key);
+              let bg = "#052e16", color = "#4ade80", border = "1px solid #14532d";
+              if (isWeekend) { bg="#0f172a"; color="#334155"; border="1px solid #1e293b"; }
+              else if (isBlocked) { bg="#450a0a"; color="#ef4444"; border="1px solid #7f1d1d"; }
+              return (
+                <div key={i} onClick={async () => {
+                  if (isWeekend) return;
+                  const nuevos = isBlocked ? diasBloqueadosAdmin.filter(d => d !== key) : [...diasBloqueadosAdmin, key];
+                  setDiasBloqueadosAdmin(nuevos);
+                  await setDoc(doc(db, "admin", "bloqueados"), { dias: nuevos });
+                }} style={{ borderRadius:7, padding:"5px 2px", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:44, fontSize:13, border, background:bg, color, cursor: isWeekend ? "default" : "pointer" }}>
+                  <span>{day}</span>
+                  {isBlocked && <span style={{ fontSize:9 }}>cerrado</span>}
+                </div>
+              );
+            });
+          })()}
+        </div>
 
         <hr style={S.divider} />
         <p style={S.secLabel}>Todos los clientes ({users.length})</p>
